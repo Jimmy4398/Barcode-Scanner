@@ -15,7 +15,7 @@
     color: #1a1a1a;
   }
   h1 { font-size: 20px; margin: 0 0 12px; }
-  #reader { width: 100%; max-height: 150px; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; }
+  #reader { width: 100%; max-height: 260px; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; }
   #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
   button {
     font-size: 16px; padding: 12px 16px; border-radius: 10px; border: none;
@@ -51,6 +51,11 @@
   .history-err { background: #fee2e2; }
   .history-item .hcode { font-weight: 600; }
   .history-item .htime { font-size: 12px; color: #555; }
+  #confirmCard { display: none; }
+  #confirmCard .code { font-size: 22px; font-weight: 700; text-align: center; margin: 8px 0 16px; word-break: break-all; }
+  .confirm-btns { display: flex; gap: 8px; }
+  .accept-btn { background: #16a34a; color: white; }
+  .decline-btn { background: #dc2626; color: white; }
 </style>
 </head>
 <body>
@@ -95,6 +100,15 @@
       <button class="primary" id="startScan">▶ Start Scanning</button>
       <button class="secondary" id="toggleScan" style="display:none;">Pause Camera</button>
 
+      <div id="confirmCard" class="card">
+        <div style="font-size:13px;color:#666;text-align:center;">Scanned:</div>
+        <div class="code" id="confirmCode"></div>
+        <div class="confirm-btns">
+          <button class="accept-btn" onclick="acceptScan()">✅ Accept</button>
+          <button class="decline-btn" onclick="declineScan()">❌ Decline</button>
+        </div>
+      </div>
+
       <div id="manualEntry">
         <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
         <button class="primary" onclick="handleManualLookup()">Go</button>
@@ -118,6 +132,7 @@
   let LOCATION_FIELD = null; // the field config named 'Location'
   let activeLocation = null;
   let currentBarcode = null;
+  let pendingBarcode = null;
   let scanner = null;
   let scanningPaused = false;
 
@@ -224,8 +239,27 @@
   document.getElementById('startScan').addEventListener('click', startScanner);
 
   function onScanSuccess(decodedText) {
-    if (scanningPaused) return;
-    handleBarcode(decodedText);
+    if (scanningPaused || pendingBarcode) return;
+    pendingBarcode = decodedText;
+    if (scanner) { try { scanner.pause(true); } catch (e) {} }
+    document.getElementById('confirmCode').textContent = decodedText;
+    document.getElementById('confirmCard').style.display = 'block';
+  }
+
+  function acceptScan() {
+    const code = pendingBarcode;
+    hideConfirmCard();
+    handleBarcode(code);
+  }
+
+  function declineScan() {
+    hideConfirmCard();
+  }
+
+  function hideConfirmCard() {
+    pendingBarcode = null;
+    document.getElementById('confirmCard').style.display = 'none';
+    if (scanner) { try { scanner.resume(); } catch (e) {} }
   }
 
   document.getElementById('toggleScan').addEventListener('click', () => {
@@ -235,7 +269,12 @@
 
   function handleManualLookup() {
     const val = document.getElementById('manualBarcode').value.trim();
-    if (val) { handleBarcode(val); document.getElementById('manualBarcode').value = ''; }
+    if (val) {
+      document.getElementById('manualBarcode').value = '';
+      pendingBarcode = val;
+      document.getElementById('confirmCode').textContent = val;
+      document.getElementById('confirmCard').style.display = 'block';
+    }
   }
 
   // Every scan (camera or manual) immediately updates the row to activeLocation
