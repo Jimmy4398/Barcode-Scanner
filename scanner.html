@@ -15,7 +15,8 @@
     color: #1a1a1a;
   }
   h1 { font-size: 20px; margin: 0 0 12px; }
-  #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; }
+  #reader { width: 100%; max-height: 150px; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; }
+  #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
   button {
     font-size: 16px; padding: 12px 16px; border-radius: 10px; border: none;
     cursor: pointer; width: 100%; margin-bottom: 8px;
@@ -40,6 +41,16 @@
   #manualEntry button { width: auto; }
   #gate { max-width: 360px; margin: 40px auto; }
   #gate .card { text-align: center; }
+  #locationBar { display: flex; align-items: center; gap: 8px; background: white; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  #locationBar .locLabel { font-size: 12px; color: #666; }
+  #locationBar .locValue { font-size: 15px; font-weight: 700; flex: 1; }
+  #locationBar button { width: auto; margin: 0; padding: 8px 12px; font-size: 13px; }
+  #historyList { max-height: 45vh; overflow-y: auto; }
+  .history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 10px; margin-bottom: 6px; font-size: 14px; }
+  .history-ok { background: #dcfce7; }
+  .history-err { background: #fee2e2; }
+  .history-item .hcode { font-weight: 600; }
+  .history-item .htime { font-size: 12px; color: #555; }
 </style>
 </head>
 <body>
@@ -61,18 +72,38 @@
 
     <div id="status"></div>
 
-    <div id="reader" style="display:none;"></div>
-    <button class="primary" id="startScan">▶ Start Scanning</button>
-    <button class="secondary" id="toggleScan" style="display:none;">Pause Camera</button>
-
-    <div id="manualEntry">
-      <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
-      <button class="primary" onclick="handleManualLookup()">Go</button>
+    <!-- Step 1: pick the location this batch of scans will apply to -->
+    <div id="locationPicker" class="card">
+      <div class="field-group" style="margin-bottom:8px;">
+        <label>Set location for this batch</label>
+        <select id="batchLocation"></select>
+      </div>
+      <button class="primary" onclick="confirmLocation()">Start Scanning</button>
     </div>
 
-    <div id="resultCard" class="card" style="display:none;">
-      <div id="itemDetails"></div>
-      <div id="updateForm"></div>
+    <!-- Step 2: shown once a location is set -->
+    <div id="scanningArea" style="display:none;">
+      <div id="locationBar">
+        <div>
+          <div class="locLabel">Updating everything scanned to:</div>
+          <div class="locValue" id="activeLocationLabel"></div>
+        </div>
+        <button class="secondary" onclick="changeLocation()">Change</button>
+      </div>
+
+      <div id="reader" style="display:none;"></div>
+      <button class="primary" id="startScan">▶ Start Scanning</button>
+      <button class="secondary" id="toggleScan" style="display:none;">Pause Camera</button>
+
+      <div id="manualEntry">
+        <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
+        <button class="primary" onclick="handleManualLookup()">Go</button>
+      </div>
+
+      <div class="card">
+        <div style="font-size:13px;color:#666;margin-bottom:8px;">Recent scans</div>
+        <div id="historyList"></div>
+      </div>
     </div>
 
     <button class="secondary" onclick="signOut()">Use a different code</button>
@@ -84,6 +115,8 @@
   // ===================================================================================
 
   let FIELDS = null;
+  let LOCATION_FIELD = null; // the field config named 'Location'
+  let activeLocation = null;
   let currentBarcode = null;
   let scanner = null;
   let scanningPaused = false;
@@ -137,9 +170,37 @@
         return;
       }
       FIELDS = res.fields;
+      LOCATION_FIELD = FIELDS.find(f => f.name === 'Location') || FIELDS[0];
+      populateLocationDropdown();
       document.getElementById('gate').style.display = 'none';
       document.getElementById('app').style.display = 'block';
     }).catch(() => showStatus('Network error, try again', false, 'gateStatus'));
+  }
+
+  function populateLocationDropdown() {
+    const sel = document.getElementById('batchLocation');
+    sel.innerHTML = '';
+    (LOCATION_FIELD.options || []).forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      sel.appendChild(o);
+    });
+  }
+
+  function confirmLocation() {
+    activeLocation = document.getElementById('batchLocation').value;
+    document.getElementById('activeLocationLabel').textContent = activeLocation;
+    document.getElementById('locationPicker').style.display = 'none';
+    document.getElementById('scanningArea').style.display = 'block';
+  }
+
+  function changeLocation() {
+    if (scanner) { scanner.stop().catch(() => {}); }
+    document.getElementById('reader').style.display = 'none';
+    document.getElementById('startScan').style.display = 'block';
+    document.getElementById('toggleScan').style.display = 'none';
+    document.getElementById('scanningArea').style.display = 'none';
+    document.getElementById('locationPicker').style.display = 'block';
   }
 
   function startScanner() {
@@ -150,7 +211,7 @@
     scanner = new Html5Qrcode('reader');
     scanner.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 250, height: 150 } },
+      { fps: 10, qrbox: { width: 220, height: 90 } },
       onScanSuccess,
       () => {}
     ).catch(err => {
@@ -174,66 +235,27 @@
 
   function handleManualLookup() {
     const val = document.getElementById('manualBarcode').value.trim();
-    if (val) handleBarcode(val);
+    if (val) { handleBarcode(val); document.getElementById('manualBarcode').value = ''; }
   }
 
+  // Every scan (camera or manual) immediately updates the row to activeLocation
   function handleBarcode(code) {
     currentBarcode = code;
-    callApi('lookup', { barcode: code })
-      .then(renderResult)
-      .catch(err => showStatus('Error: ' + err.message, false));
+    callApi('update', { barcode: code, field: LOCATION_FIELD.name, value: activeLocation })
+      .then(res => addHistoryItem(code, res.success, res.success ? activeLocation : res.error))
+      .catch(err => addHistoryItem(code, false, err.message));
   }
 
-  function renderResult(result) {
-    const card = document.getElementById('resultCard');
-    const details = document.getElementById('itemDetails');
-    const form = document.getElementById('updateForm');
-    card.style.display = 'block';
-
-    if (!result.success) { showStatus(result.error, false); return; }
-    if (!result.found) {
-      details.innerHTML = '<div class="row"><span>Not found:</span><span>' + currentBarcode + '</span></div>';
-      form.innerHTML = '';
-      showStatus('No item found for that barcode', false);
-      return;
-    }
-
-    let rows = '';
-    Object.keys(result.data).forEach(key => {
-      rows += '<div class="row"><span class="label">' + key + '</span><span>' + result.data[key] + '</span></div>';
-    });
-    details.innerHTML = rows;
-
-    let formHtml = '';
-    FIELDS.forEach((f, idx) => {
-      formHtml += '<div class="field-group"><label>' + f.name + '</label>';
-      if (f.type === 'select') {
-        formHtml += '<select id="field_' + idx + '">';
-        f.options.forEach(opt => {
-          const sel = result.data[f.name] === opt ? 'selected' : '';
-          formHtml += '<option ' + sel + '>' + opt + '</option>';
-        });
-        formHtml += '</select>';
-      } else {
-        formHtml += '<input type="' + f.type + '" id="field_' + idx + '" value="' + (result.data[f.name] || '') + '">';
-      }
-      formHtml += '<button class="update-btn" onclick="submitUpdate(' + idx + ', \'' + f.name + '\')">Update ' + f.name + '</button></div>';
-    });
-    form.innerHTML = formHtml;
-  }
-
-  function submitUpdate(idx, fieldName) {
-    const val = document.getElementById('field_' + idx).value;
-    callApi('update', { barcode: currentBarcode, field: fieldName, value: val })
-      .then(res => {
-        if (res.success) {
-          showStatus(res.message, true);
-          handleBarcode(currentBarcode); // refresh
-        } else {
-          showStatus(res.error, false);
-        }
-      })
-      .catch(err => showStatus('Error: ' + err.message, false));
+  function addHistoryItem(code, ok, message) {
+    const list = document.getElementById('historyList');
+    const item = document.createElement('div');
+    item.className = 'history-item ' + (ok ? 'history-ok' : 'history-err');
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    item.innerHTML = '<span class="hcode">' + code + '</span>' +
+      '<span>' + (ok ? '✅ ' + message : '❌ ' + message) + '</span>' +
+      '<span class="htime">' + time + '</span>';
+    list.insertBefore(item, list.firstChild);
+    showStatus(ok ? 'Updated ' + code : 'Failed: ' + code, ok);
   }
 
   // ---- On load: skip straight in if a code is already saved ----
