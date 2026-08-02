@@ -321,7 +321,7 @@
         setLocation(currentView, options[0]);
       }
     } else if (currentView === 'workshop') {
-      const options = ['All'].concat(SERVER_CONFIG.locationOptions);
+      const options = ['All'].concat(SERVER_CONFIG.hostSiteOptions).concat(['Packing Day Locations']);
       populateDropdown('locationSelect', options);
       document.getElementById('locationSelect').value = getLocationFilter();
       loadSummary(); // also (re)populates the Site dropdown from live data
@@ -379,7 +379,7 @@
     pendingBarcode = code;
     if (scanner) { try { scanner.pause(true); } catch (e) {} }
 
-    if (currentView === 'packing') {
+    if (currentView === 'packing' && document.getElementById('locationSelect').value !== 'Packing Day (Truck)') {
       document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
       document.getElementById('confirmCode').textContent = code + ' (checking...)';
       document.getElementById('confirmBlock').style.display = 'block';
@@ -612,16 +612,21 @@
   }
 
   function renderSummary(res) {
+    const locFilter = getLocationFilter();
+    const showHostSites = (locFilter !== 'Packing Day Locations');
     let html = '<div><b>Locations:</b></div>';
-    let anyHostSite = false;
-    for (let i = 1; i <= 32; i++) {
-      const name = 'Host Site ' + i;
-      const c = res.hostSiteCounts[name] || { rec: 0, loc: 0 };
-      if (c.rec === 0 && c.loc === 0) continue;
-      anyHostSite = true;
-      html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
+
+    if (showHostSites) {
+      let anyHostSite = false;
+      for (let i = 1; i <= 32; i++) {
+        const name = 'Host Site ' + i;
+        const c = res.hostSiteCounts[name] || { rec: 0, loc: 0 };
+        if (c.rec === 0 && c.loc === 0) continue;
+        anyHostSite = true;
+        html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
+      }
+      if (!anyHostSite) html += '<div style="color:#666;">No host site activity for this selection.</div>';
     }
-    if (!anyHostSite) html += '<div style="color:#666;">No host site activity for this selection.</div>';
 
     SERVER_CONFIG.packingOptions.forEach(name => {
       const c = res.otherCounts[name] || 0;
