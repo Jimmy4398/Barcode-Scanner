@@ -14,15 +14,13 @@
 
   .block { margin-bottom: 14px; }
   .block-header { background: #E8262B; color: #111827; border: 3px solid #111827; border-bottom: none; border-radius: 10px 10px 0 0; padding: 6px 12px; font-size: 14px; font-weight: 700; }
-  .block-body { background: white; border: 3px solid #111827; border-radius: 0 0 10px 10px; padding: 10px; }
+  .block-body { background: white; border: 3px solid #111827; border-radius: 0 0 10px 10px; padding: 10px; overflow: hidden; }
   .block-body.no-header { border-radius: 10px; }
 
-  .dd-row { display: flex; align-items: stretch; }
   select.dd {
-    flex: 1; background: #FFEB3B; border: none; font-size: 15px; font-weight: 600;
-    color: #111827; padding: 8px; appearance: none; -webkit-appearance: none;
+    width: 100%; background: #FFEB3B; border: none; font-size: 15px; font-weight: 600;
+    color: #111827; padding: 10px 8px; appearance: none; -webkit-appearance: none;
   }
-  .arrow-box { width: 42px; display: flex; align-items: center; justify-content: center; border-left: 3px solid #111827; background: white; font-size: 13px; }
 
   #reader { width: 100%; max-height: 240px; border-radius: 6px; overflow: hidden; background: #000; }
   #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
@@ -43,10 +41,9 @@
   .status-ok { background: #dcfce7; color: #166534; display: block !important; }
   .status-err { background: #fee2e2; color: #991b1b; display: block !important; }
 
-  #confirmBlock, #followupBlock { display: none; }
+  #confirmBlock, #followupBlock, #resultBlock { display: none; }
   .scanned-code { font-size: 22px; font-weight: 800; text-align: center; margin: 6px 0 8px; word-break: break-all; background: #FFEB3B; padding: 8px; border-radius: 6px; }
 
-  /* button-group (Status / Complete) */
   .btn-group { display: flex; gap: 6px; margin: 6px 0 12px; }
   .btn-group button { flex: 1; background: #e5e7eb; color: #111827; border: 2px solid #111827; padding: 8px 4px; font-size: 13px; }
   .btn-group button.selected { background: #111827; color: white; }
@@ -99,45 +96,32 @@
 
     <div id="status"></div>
 
-    <!-- View selector (always visible, always changeable) -->
     <div class="block">
       <div class="block-header">View:</div>
       <div class="block-body" style="padding:0;">
-        <div class="dd-row">
-          <select id="viewSelect" class="dd" onchange="onViewChange()">
-            <option value="sitehost">Site Host Elf</option>
-            <option value="packing">Packing Day Elf</option>
-            <option value="guiding">Guiding Spirit</option>
-            <option value="workshop">Santa's Workshop</option>
-          </select>
-          <div class="arrow-box">▼</div>
-        </div>
+        <select id="viewSelect" class="dd" onchange="onViewChange()">
+          <option value="sitehost">Site Host Elf</option>
+          <option value="packing">Packing Day Elf</option>
+          <option value="guiding">Guiding Spirit</option>
+          <option value="workshop">Santa's Workshop</option>
+        </select>
       </div>
     </div>
 
-    <!-- Location selector, shown for the 3 scanning roles -->
     <div class="block" id="locationBlock">
       <div class="block-header">Location:</div>
       <div class="block-body" style="padding:0;">
-        <div class="dd-row">
-          <select id="locationSelect" class="dd" onchange="onLocationChange()"></select>
-          <div class="arrow-box">▼</div>
-        </div>
+        <select id="locationSelect" class="dd" onchange="onLocationChange()"></select>
       </div>
     </div>
 
-    <!-- Site filter, shown only for Santa's Workshop -->
     <div class="block" id="siteBlock" style="display:none;">
       <div class="block-header">Site:</div>
       <div class="block-body" style="padding:0;">
-        <div class="dd-row">
-          <select id="siteSelect" class="dd" onchange="onSiteChange()"></select>
-          <div class="arrow-box">▼</div>
-        </div>
+        <select id="siteSelect" class="dd" onchange="onSiteChange()"></select>
       </div>
     </div>
 
-    <!-- Shared scan panel: camera + manual entry + confirm, used by the 3 scanning roles -->
     <div id="scanPanel" style="display:none;">
       <div class="block">
         <div class="block-header">SCAN BARCODE</div>
@@ -155,6 +139,12 @@
             </div>
           </div>
 
+          <div id="resultBlock">
+            <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Send to:</div>
+            <div class="scanned-code" id="resultCode"></div>
+            <button class="btn-primary btn-block" onclick="continueAfterResult()">Continue</button>
+          </div>
+
           <div class="manual-row">
             <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
             <button class="btn-gray" onclick="handleManualLookup()">Submit</button>
@@ -162,13 +152,11 @@
         </div>
       </div>
 
-      <!-- Follow-up content differs per role: Site Host form / Guiding Spirit details -->
       <div id="followupBlock" class="block">
         <div class="block-header" id="followupHeader">Details</div>
         <div class="block-body" id="followupBody"></div>
       </div>
 
-      <!-- History list (Packing Day + general log) -->
       <div class="block" id="historyBlock">
         <div class="block-body no-header">
           <div style="font-size:12px;color:#666;margin-bottom:6px;">Recent scans</div>
@@ -177,7 +165,6 @@
       </div>
     </div>
 
-    <!-- Santa's Workshop dashboard -->
     <div id="workshopPanel" style="display:none;">
       <button class="btn-blue btn-block" onclick="loadSummary()" style="margin-bottom:10px;">🔄 Refresh</button>
 
@@ -200,9 +187,15 @@
   const API_URL = 'https://script.google.com/macros/s/AKfycby8QcEYA5u8_WiPD7ldafBbGMFuA4YWhNMx45fH0_TmgvDgj2hpXhocCcRucQ43QJdd/exec';
   // =========================================================
 
+  const PACKING_COLORS = { yellow: '#FFEB3B', blue: '#60A5FA', pink: '#F472B6', green: '#4ADE80' };
+  const INCOMPLETE_COLOR = '#EF4444';
+  const FALLBACK_COLOR = '#D1D5DB';
+  const GUIDING_LOCATION = 'Packing Day (Spirit)';
+
   let SERVER_CONFIG = null;
   let currentView = 'packing';
   let pendingBarcode = null;
+  let currentItemData = null;
   let scanner = null;
   let scanningPaused = false;
 
@@ -212,6 +205,8 @@
   function setView(v) { localStorage.setItem('op_elf_view', v); }
   function getLocation(view) { return localStorage.getItem('op_elf_loc_' + view) || ''; }
   function setLocation(view, val) { localStorage.setItem('op_elf_loc_' + view, val); }
+  function getLocationFilter() { return localStorage.getItem('op_elf_locfilter_workshop') || 'All'; }
+  function setLocationFilter(val) { localStorage.setItem('op_elf_locfilter_workshop', val); }
   function getSiteFilter() { return localStorage.getItem('op_elf_site_workshop') || 'All'; }
   function setSiteFilter(val) { localStorage.setItem('op_elf_site_workshop', val); }
 
@@ -265,8 +260,6 @@
   function initApp() {
     currentView = getView();
     document.getElementById('viewSelect').value = currentView;
-    populateDropdown('locationSelect', SERVER_CONFIG.locationOptions);
-    populateDropdown('siteSelect', ['All'].concat(SERVER_CONFIG.locationOptions));
     renderView();
   }
 
@@ -280,6 +273,13 @@
     });
   }
 
+  function locationOptionsForView(view) {
+    if (view === 'sitehost') return SERVER_CONFIG.hostSiteOptions;
+    if (view === 'packing') return SERVER_CONFIG.packingOptions;
+    if (view === 'guiding') return [GUIDING_LOCATION];
+    return SERVER_CONFIG.locationOptions;
+  }
+
   function onViewChange() {
     currentView = document.getElementById('viewSelect').value;
     setView(currentView);
@@ -288,7 +288,12 @@
   }
 
   function onLocationChange() {
-    setLocation(currentView, document.getElementById('locationSelect').value);
+    if (currentView === 'workshop') {
+      setLocationFilter(document.getElementById('locationSelect').value);
+      loadSummary();
+    } else {
+      setLocation(currentView, document.getElementById('locationSelect').value);
+    }
   }
 
   function onSiteChange() {
@@ -298,31 +303,37 @@
 
   function renderView() {
     const isScanRole = (currentView === 'sitehost' || currentView === 'packing' || currentView === 'guiding');
-    document.getElementById('locationBlock').style.display = isScanRole ? 'block' : 'none';
+    const showLocation = isScanRole || currentView === 'workshop';
+    document.getElementById('locationBlock').style.display = showLocation ? 'block' : 'none';
     document.getElementById('siteBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
     document.getElementById('scanPanel').style.display = isScanRole ? 'block' : 'none';
     document.getElementById('workshopPanel').style.display = (currentView === 'workshop') ? 'block' : 'none';
     document.getElementById('historyBlock').style.display = isScanRole ? 'block' : 'none';
 
     if (isScanRole) {
+      const options = locationOptionsForView(currentView);
+      populateDropdown('locationSelect', options);
       const savedLoc = getLocation(currentView);
-      if (savedLoc && SERVER_CONFIG.locationOptions.includes(savedLoc)) {
+      if (savedLoc && options.includes(savedLoc)) {
         document.getElementById('locationSelect').value = savedLoc;
       } else {
-        document.getElementById('locationSelect').value = SERVER_CONFIG.locationOptions[0];
-        setLocation(currentView, SERVER_CONFIG.locationOptions[0]);
+        document.getElementById('locationSelect').value = options[0];
+        setLocation(currentView, options[0]);
       }
-    }
-    if (currentView === 'workshop') {
-      document.getElementById('siteSelect').value = getSiteFilter();
-      loadSummary();
+    } else if (currentView === 'workshop') {
+      const options = ['All'].concat(SERVER_CONFIG.locationOptions);
+      populateDropdown('locationSelect', options);
+      document.getElementById('locationSelect').value = getLocationFilter();
+      loadSummary(); // also (re)populates the Site dropdown from live data
     }
   }
 
   function resetScanUI() {
     pendingBarcode = null;
+    currentItemData = null;
     document.getElementById('confirmBlock').style.display = 'none';
     document.getElementById('followupBlock').style.display = 'none';
+    document.getElementById('resultBlock').style.display = 'none';
     document.getElementById('historyList').innerHTML = '';
     if (scanner) { try { scanner.stop(); } catch (e) {} scanner = null; }
     document.getElementById('reader').style.display = 'none';
@@ -355,18 +366,44 @@
 
   function onScanSuccess(decodedText) {
     if (scanningPaused || pendingBarcode) return;
-    showConfirm(decodedText);
+    beginScan(decodedText);
   }
   function handleManualLookup() {
     const val = document.getElementById('manualBarcode').value.trim();
-    if (val) { document.getElementById('manualBarcode').value = ''; showConfirm(val); }
+    if (val) { document.getElementById('manualBarcode').value = ''; beginScan(val.toUpperCase()); }
   }
-  function showConfirm(code) {
+
+  // Routes into either the plain confirm box, or (Packing Day only) a
+  // colored confirm box that first looks up Complete + Packing Table.
+  function beginScan(code) {
     pendingBarcode = code;
     if (scanner) { try { scanner.pause(true); } catch (e) {} }
-    document.getElementById('confirmCode').textContent = code;
-    document.getElementById('confirmBlock').style.display = 'block';
+
+    if (currentView === 'packing') {
+      document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+      document.getElementById('confirmCode').textContent = code + ' (checking...)';
+      document.getElementById('confirmBlock').style.display = 'block';
+      callApi('lookup', { barcode: code }).then(res => {
+        let color = FALLBACK_COLOR;
+        if (res.success && res.found) {
+          const complete = (res.data['Complete'] || '').toLowerCase();
+          const table = (res.data['Packing Table'] || '').toLowerCase();
+          if (complete !== 'complete') color = INCOMPLETE_COLOR;
+          else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
+        }
+        document.getElementById('confirmCode').style.background = color;
+        document.getElementById('confirmCode').textContent = code;
+      }).catch(() => {
+        document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+        document.getElementById('confirmCode').textContent = code;
+      });
+    } else {
+      document.getElementById('confirmCode').style.background = '#FFEB3B';
+      document.getElementById('confirmCode').textContent = code;
+      document.getElementById('confirmBlock').style.display = 'block';
+    }
   }
+
   function declineScan() {
     pendingBarcode = null;
     document.getElementById('confirmBlock').style.display = 'none';
@@ -384,7 +421,7 @@
     else if (currentView === 'guiding') acceptForGuiding(code);
   }
 
-  // ---------- Packing Day Elf: auto-update Location, resume immediately ----------
+  // ---------- Packing Day Elf ----------
   function acceptForPacking(code) {
     const loc = document.getElementById('locationSelect').value;
     callApi('update', { barcode: code, field: 'Location', value: loc })
@@ -392,7 +429,7 @@
       .catch(err => { addHistoryItem(code, false, err.message); pendingBarcode = null; resumeCamera(); });
   }
 
-  // ---------- Site Host Elf: lookup then show editable form ----------
+  // ---------- Site Host Elf ----------
   let sitehostState = { status: 'Empty', complete: 'Empty' };
 
   function acceptForSiteHost(code) {
@@ -409,9 +446,8 @@
   }
 
   function renderSiteHostForm(code, data) {
-    const header = document.getElementById('followupHeader');
+    document.getElementById('followupHeader').textContent = 'Update Entry';
     const body = document.getElementById('followupBody');
-    header.textContent = 'Update Entry';
 
     let html = '<div class="scanned-code">' + code + '</div>';
     html += '<div class="field-label">Gift Status</div><div class="btn-group" id="statusGroup">';
@@ -429,7 +465,6 @@
     html += '</div>';
 
     html += '<div class="field-label">Anything Missing</div><textarea class="field-input" id="missingInput">' + (data['Missing'] || '') + '</textarea>';
-
     html += '<button class="btn-blue btn-block" style="margin-top:12px;" onclick="submitSiteHostUpdate(\'' + code + '\')">UPDATE</button>';
 
     body.innerHTML = html;
@@ -439,9 +474,7 @@
   function selectBtn(group, value) {
     sitehostState[group] = value;
     const groupEl = document.getElementById(group + 'Group');
-    Array.from(groupEl.children).forEach(btn => {
-      btn.classList.toggle('selected', btn.textContent === value);
-    });
+    Array.from(groupEl.children).forEach(btn => btn.classList.toggle('selected', btn.textContent === value));
   }
 
   function submitSiteHostUpdate(code) {
@@ -468,7 +501,7 @@
       });
   }
 
-  // ---------- Guiding Spirit: auto-update Location, show read-only details + Gift Complete ----------
+  // ---------- Guiding Spirit ----------
   function acceptForGuiding(code) {
     const loc = document.getElementById('locationSelect').value;
     callApi('update', { barcode: code, field: 'Location', value: loc }).catch(() => {});
@@ -478,14 +511,14 @@
         pendingBarcode = null; resumeCamera();
         return;
       }
+      currentItemData = res.data;
       renderGuidingDetails(code, res.data);
     }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
   }
 
   function renderGuidingDetails(code, data) {
-    const header = document.getElementById('followupHeader');
+    document.getElementById('followupHeader').textContent = 'Entry Details';
     const body = document.getElementById('followupBody');
-    header.textContent = 'Entry Details';
 
     let html = '<div class="scanned-code">' + code + '</div>';
     html += '<div class="detail-line"><b>Missing:</b> ' + (data['Missing'] || '—') + '</div><hr>';
@@ -509,19 +542,41 @@
       .then(res => {
         addHistoryItem(code, res.success, res.success ? 'Gift Complete' : res.error);
         document.getElementById('followupBlock').style.display = 'none';
-        pendingBarcode = null;
-        resumeCamera();
+        if (res.success) {
+          showPackingResult(code);
+        } else {
+          currentItemData = null;
+          pendingBarcode = null;
+          resumeCamera();
+        }
       })
       .catch(err => {
         addHistoryItem(code, false, err.message);
         document.getElementById('followupBlock').style.display = 'none';
+        currentItemData = null;
         pendingBarcode = null;
         resumeCamera();
       });
   }
 
+  function showPackingResult(code) {
+    const table = (currentItemData && currentItemData['Packing Table'] || '').toLowerCase();
+    const color = PACKING_COLORS[table] || FALLBACK_COLOR;
+    document.getElementById('resultCode').style.background = color;
+    document.getElementById('resultCode').textContent = code + (currentItemData['Packing Table'] ? ' — ' + currentItemData['Packing Table'] : '');
+    document.getElementById('resultBlock').style.display = 'block';
+  }
+
+  function continueAfterResult() {
+    document.getElementById('resultBlock').style.display = 'none';
+    currentItemData = null;
+    pendingBarcode = null;
+    resumeCamera();
+  }
+
   function skipFollowup() {
     document.getElementById('followupBlock').style.display = 'none';
+    currentItemData = null;
     pendingBarcode = null;
     resumeCamera();
   }
@@ -539,12 +594,18 @@
 
   // ---------- Santa's Workshop ----------
   function loadSummary() {
-    const loc = 'All'; // Wish Summary always shows the full breakdown
+    const loc = getLocationFilter();
     const site = getSiteFilter();
     document.getElementById('summaryList').textContent = 'Loading...';
     document.getElementById('wishListBox').textContent = 'Loading...';
     callApi('summary', { location: loc, site: site }).then(res => {
       if (!res.success) { document.getElementById('summaryList').textContent = res.error; return; }
+
+      // (Re)populate Site dropdown from live data, then Location dropdown from server config
+      const siteOptions = ['All'].concat(res.sitePrefixes);
+      populateDropdown('siteSelect', siteOptions);
+      document.getElementById('siteSelect').value = siteOptions.includes(site) ? site : 'All';
+
       renderSummary(res);
       renderWishList(res.codes);
     }).catch(err => { document.getElementById('summaryList').textContent = 'Error: ' + err.message; });
@@ -557,8 +618,7 @@
       const c = res.hostSiteCounts[name] || { rec: 0, loc: 0 };
       html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
     }
-    const otherNames = SERVER_CONFIG.locationOptions.filter(n => !/^Host Site \d+$/.test(n));
-    otherNames.forEach(name => {
+    SERVER_CONFIG.packingOptions.forEach(name => {
       const c = res.otherCounts[name] || 0;
       html += '<div><b>' + name + '</b> = ' + c + '</div>';
     });
