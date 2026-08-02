@@ -42,7 +42,7 @@
   .status-err { background: #fee2e2; color: #991b1b; display: block !important; }
 
   #confirmBlock, #followupBlock, #resultBlock { display: none; }
-  .scanned-code { font-size: 22px; font-weight: 800; text-align: center; margin: 6px 0 8px; word-break: break-all; background: #FFEB3B; padding: 8px; border-radius: 6px; }
+  .scanned-code { font-size: 22px; font-weight: 800; text-align: center; margin: 6px 0 8px; word-break: break-all; background: #D1D5DB; padding: 8px; border-radius: 6px; }
 
   .btn-group { display: flex; gap: 6px; margin: 6px 0 12px; }
   .btn-group button { flex: 1; background: #e5e7eb; color: #111827; border: 2px solid #111827; padding: 8px 4px; font-size: 13px; }
@@ -188,7 +188,7 @@
   // =========================================================
 
   const PACKING_COLORS = { yellow: '#FFEB3B', blue: '#60A5FA', pink: '#F472B6', green: '#4ADE80' };
-  const INCOMPLETE_COLOR = '#EF4444';
+  const INCOMPLETE_COLOR = '#B91C1C';
   const FALLBACK_COLOR = '#D1D5DB';
   const GUIDING_LOCATION = 'Packing Day (Spirit)';
 
@@ -398,7 +398,7 @@
         document.getElementById('confirmCode').textContent = code;
       });
     } else {
-      document.getElementById('confirmCode').style.background = '#FFEB3B';
+      document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
       document.getElementById('confirmCode').textContent = code;
       document.getElementById('confirmBlock').style.display = 'block';
     }
