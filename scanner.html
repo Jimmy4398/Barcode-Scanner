@@ -3,132 +3,84 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Scanning Tool</title>
+<title>Operation Elf Scanner</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #eef1f0;
-  }
-  #phone {
-    max-width: 420px;
-    margin: 16px auto;
-    background: #1AA260;
-    border: 5px solid #111827;
-    border-radius: 42px;
-    padding: 20px 18px 28px;
-    min-height: 90vh;
-  }
-  h1.title {
-    text-align: center;
-    font-size: 30px;
-    color: #111827;
-    margin: 4px 0 18px;
-    font-weight: 600;
-  }
-  .block { margin-bottom: 16px; }
-  .block-header {
-    background: #E8262B;
-    color: #111827;
-    border: 3px solid #111827;
-    border-bottom: none;
-    border-radius: 10px 10px 0 0;
-    padding: 6px 12px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-  .block-body {
-    background: white;
-    border: 3px solid #111827;
-    border-radius: 0 0 10px 10px;
-    padding: 10px;
-  }
+  html, body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eef1f0; }
+  #phone { max-width: 420px; margin: 16px auto; background: #1AA260; border: 5px solid #111827; border-radius: 42px; padding: 20px 18px 28px; min-height: 90vh; }
+  h1.title { text-align: center; font-size: 24px; color: #111827; margin: 4px 0 4px; font-weight: 700; }
+  p.subtitle { text-align: center; font-size: 11px; color: #0b3d23; margin: 0 0 14px; }
+
+  .block { margin-bottom: 14px; }
+  .block-header { background: #E8262B; color: #111827; border: 3px solid #111827; border-bottom: none; border-radius: 10px 10px 0 0; padding: 6px 12px; font-size: 14px; font-weight: 700; }
+  .block-body { background: white; border: 3px solid #111827; border-radius: 0 0 10px 10px; padding: 10px; }
   .block-body.no-header { border-radius: 10px; }
 
-  /* Location row: yellow select + decorative arrow box */
-  .loc-row { display: flex; align-items: stretch; }
-  select#batchLocation {
-    flex: 1;
-    background: #FFEB3B;
-    border: none;
-    font-size: 16px;
-    font-weight: 600;
-    color: #111827;
-    padding: 8px;
-    appearance: none;
-    -webkit-appearance: none;
+  .dd-row { display: flex; align-items: stretch; }
+  select.dd {
+    flex: 1; background: #FFEB3B; border: none; font-size: 15px; font-weight: 600;
+    color: #111827; padding: 8px; appearance: none; -webkit-appearance: none;
   }
-  .arrow-box {
-    width: 46px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-left: 3px solid #111827;
-    background: white;
-    font-size: 14px;
-    color: #1e3a5f;
-  }
+  .arrow-box { width: 42px; display: flex; align-items: center; justify-content: center; border-left: 3px solid #111827; background: white; font-size: 13px; }
 
-  /* Camera */
-  #reader { width: 100%; max-height: 260px; border-radius: 6px; overflow: hidden; background: #000; }
+  #reader { width: 100%; max-height: 240px; border-radius: 6px; overflow: hidden; background: #000; }
   #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
-  #scanControls { display: flex; gap: 8px; margin-top: 8px; }
 
-  button {
-    font-size: 15px; padding: 10px 14px; border-radius: 8px; border: none;
-    cursor: pointer; font-weight: 600;
-  }
+  button { font-size: 14px; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; }
   .btn-block { width: 100%; }
   .btn-primary { background: #111827; color: white; }
   .btn-gray { background: #808080; color: white; }
+  .btn-blue { background: #1e88e5; color: white; }
   .btn-accept { background: #16a34a; color: white; flex: 1; }
   .btn-decline { background: #dc2626; color: white; flex: 1; }
+  .confirm-btns { display: flex; gap: 8px; margin-top: 8px; }
 
-  /* Manual entry */
-  .manual-row { display: flex; gap: 8px; }
-  .manual-row input {
-    flex: 1; padding: 9px 10px; font-size: 15px; border-radius: 8px; border: 2px solid #111827;
-  }
+  .manual-row { display: flex; gap: 8px; margin-top: 10px; }
+  .manual-row input { flex: 1; padding: 9px 10px; font-size: 15px; border-radius: 8px; border: 2px solid #111827; }
 
-  /* Scanned items list */
-  #listBlock .block-body { min-height: 320px; }
-  #placeholderText { text-align: center; font-weight: 700; color: #111827; margin-top: 130px; font-size: 16px; }
-  #historyList { max-height: 55vh; overflow-y: auto; }
-  .history-item {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; font-size: 13px;
-  }
+  #status { font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; display: none; text-align: center; font-weight: 700; }
+  .status-ok { background: #dcfce7; color: #166534; display: block !important; }
+  .status-err { background: #fee2e2; color: #991b1b; display: block !important; }
+
+  #confirmBlock, #followupBlock { display: none; }
+  .scanned-code { font-size: 22px; font-weight: 800; text-align: center; margin: 6px 0 8px; word-break: break-all; background: #FFEB3B; padding: 8px; border-radius: 6px; }
+
+  /* button-group (Status / Complete) */
+  .btn-group { display: flex; gap: 6px; margin: 6px 0 12px; }
+  .btn-group button { flex: 1; background: #e5e7eb; color: #111827; border: 2px solid #111827; padding: 8px 4px; font-size: 13px; }
+  .btn-group button.selected { background: #111827; color: white; }
+  .field-label { font-size: 12px; font-weight: 700; color: #333; margin: 8px 0 2px; }
+  textarea.field-input { width: 100%; border: 2px solid #111827; border-radius: 6px; padding: 8px; font-size: 14px; min-height: 60px; resize: vertical; font-family: inherit; }
+
+  .detail-line { font-size: 14px; margin-bottom: 4px; }
+  .detail-line b { color: #111827; }
+
+  #historyList { max-height: 220px; overflow-y: auto; }
+  .history-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
   .history-ok { background: #dcfce7; }
   .history-err { background: #fee2e2; }
   .history-item .hcode { font-weight: 700; }
   .history-item .htime { font-size: 11px; color: #555; }
 
-  #status { font-size: 14px; padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; display: none; text-align: center; font-weight: 600; }
-  .status-ok { background: #dcfce7; color: #166534; display: block !important; }
-  .status-err { background: #fee2e2; color: #991b1b; display: block !important; }
-
-  #confirmBlock { display: none; }
-  #confirmBlock .code { font-size: 20px; font-weight: 700; text-align: center; margin: 6px 0 12px; word-break: break-all; }
-  .confirm-btns { display: flex; gap: 8px; }
+  #summaryList, #wishListBox { max-height: 260px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+  #summaryList .total-green { color: #166534; font-weight: 800; }
+  #summaryList .total-red { color: #991b1b; font-weight: 800; }
+  #summaryList b { font-weight: 700; }
 
   #footerLink { text-align: center; margin-top: 10px; }
-  #footerLink a { color: #0b3d23; font-size: 13px; }
+  #footerLink a { color: #0b3d23; font-size: 12px; }
 
-  /* Access code gate */
   #gate { max-width: 360px; margin: 60px auto; padding: 0 16px; }
   #gate .block-body { text-align: center; }
-  #gate input[type="password"] {
-    width: 100%; padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid #111827; margin-bottom: 10px;
-  }
+  #gate input[type="password"] { width: 100%; padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid #111827; margin-bottom: 10px; }
 </style>
 </head>
 <body>
 
   <!-- ACCESS CODE GATE -->
   <div id="gate" style="display:none;">
-    <h1 class="title">Scanning Tool</h1>
+    <h1 class="title">🎁 Operation Elf</h1>
     <div class="block">
       <div class="block-header">Access Code</div>
       <div class="block-body">
@@ -142,58 +94,101 @@
 
   <!-- MAIN APP -->
   <div id="phone" style="display:none;">
-    <h1 class="title">Scanning Tool</h1>
+    <h1 class="title">🎁 Operation Elf</h1>
+    <p class="subtitle">Making Holiday Magic for Children in Need!</p>
 
     <div id="status"></div>
 
-    <!-- Location -->
+    <!-- View selector (always visible, always changeable) -->
     <div class="block">
-      <div class="block-header">Location:</div>
+      <div class="block-header">View:</div>
       <div class="block-body" style="padding:0;">
-        <div class="loc-row">
-          <select id="batchLocation"></select>
+        <div class="dd-row">
+          <select id="viewSelect" class="dd" onchange="onViewChange()">
+            <option value="sitehost">Site Host Elf</option>
+            <option value="packing">Packing Day Elf</option>
+            <option value="guiding">Guiding Spirit</option>
+            <option value="workshop">Santa's Workshop</option>
+          </select>
           <div class="arrow-box">▼</div>
         </div>
       </div>
     </div>
 
-    <!-- Scan Bar Code -->
-    <div class="block">
-      <div class="block-header">SCAN Bar CODE</div>
-      <div class="block-body">
-        <div id="reader" style="display:none;"></div>
-        <div id="scanControls">
+    <!-- Location selector, shown for the 3 scanning roles -->
+    <div class="block" id="locationBlock">
+      <div class="block-header">Location:</div>
+      <div class="block-body" style="padding:0;">
+        <div class="dd-row">
+          <select id="locationSelect" class="dd" onchange="onLocationChange()"></select>
+          <div class="arrow-box">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Site filter, shown only for Santa's Workshop -->
+    <div class="block" id="siteBlock" style="display:none;">
+      <div class="block-header">Site:</div>
+      <div class="block-body" style="padding:0;">
+        <div class="dd-row">
+          <select id="siteSelect" class="dd" onchange="onSiteChange()"></select>
+          <div class="arrow-box">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shared scan panel: camera + manual entry + confirm, used by the 3 scanning roles -->
+    <div id="scanPanel" style="display:none;">
+      <div class="block">
+        <div class="block-header">SCAN BARCODE</div>
+        <div class="block-body">
+          <div id="reader" style="display:none;"></div>
           <button class="btn-primary btn-block" id="startScan">▶ Start Scanning</button>
           <button class="btn-gray btn-block" id="toggleScan" style="display:none;">Pause</button>
-        </div>
 
-        <div id="confirmBlock">
-          <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Scanned:</div>
-          <div class="code" id="confirmCode"></div>
-          <div class="confirm-btns">
-            <button class="btn-accept" onclick="acceptScan()">✅ Accept</button>
-            <button class="btn-decline" onclick="declineScan()">❌ Decline</button>
+          <div id="confirmBlock">
+            <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Scanned:</div>
+            <div class="scanned-code" id="confirmCode"></div>
+            <div class="confirm-btns">
+              <button class="btn-accept" onclick="acceptScan()">✅ Accept</button>
+              <button class="btn-decline" onclick="declineScan()">❌ Decline</button>
+            </div>
+          </div>
+
+          <div class="manual-row">
+            <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
+            <button class="btn-gray" onclick="handleManualLookup()">Submit</button>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Manual Entry -->
-    <div class="block">
-      <div class="block-header" style="text-align:center;">Manual Entry</div>
-      <div class="block-body">
-        <div class="manual-row">
-          <input type="text" id="manualBarcode" placeholder="">
-          <button class="btn-gray" onclick="handleManualLookup()">Submit</button>
+      <!-- Follow-up content differs per role: Site Host form / Guiding Spirit details -->
+      <div id="followupBlock" class="block">
+        <div class="block-header" id="followupHeader">Details</div>
+        <div class="block-body" id="followupBody"></div>
+      </div>
+
+      <!-- History list (Packing Day + general log) -->
+      <div class="block" id="historyBlock">
+        <div class="block-body no-header">
+          <div style="font-size:12px;color:#666;margin-bottom:6px;">Recent scans</div>
+          <div id="historyList"></div>
         </div>
       </div>
     </div>
 
-    <!-- List of Scanned items -->
-    <div class="block" id="listBlock">
-      <div class="block-body no-header">
-        <div id="placeholderText">List of Scanned items</div>
-        <div id="historyList"></div>
+    <!-- Santa's Workshop dashboard -->
+    <div id="workshopPanel" style="display:none;">
+      <button class="btn-blue btn-block" onclick="loadSummary()" style="margin-bottom:10px;">🔄 Refresh</button>
+
+      <div class="block">
+        <div class="block-header">Wish Summary</div>
+        <div class="block-body" id="summaryList">Tap Refresh to load.</div>
+      </div>
+
+      <div class="block">
+        <div class="block-header">Wish List</div>
+        <div class="block-body" id="wishListBox">Tap Refresh to load.</div>
       </div>
     </div>
 
@@ -201,18 +196,24 @@
   </div>
 
 <script>
-  // ======= SET THIS to your deployed Apps Script Web App URL (ends in /exec) =======
+  // ======= Apps Script Web App URL (ends in /exec) =======
   const API_URL = 'https://script.google.com/macros/s/AKfycby8QcEYA5u8_WiPD7ldafBbGMFuA4YWhNMx45fH0_TmgvDgj2hpXhocCcRucQ43QJdd/exec';
-  // ===================================================================================
+  // =========================================================
 
-  let FIELDS = null;
-  let LOCATION_FIELD = null;
+  let SERVER_CONFIG = null;
+  let currentView = 'packing';
   let pendingBarcode = null;
   let scanner = null;
   let scanningPaused = false;
-  let historyCount = 0;
 
+  // ---------- storage helpers ----------
   function getCode() { return localStorage.getItem('scanner_code'); }
+  function getView() { return localStorage.getItem('op_elf_view') || 'packing'; }
+  function setView(v) { localStorage.setItem('op_elf_view', v); }
+  function getLocation(view) { return localStorage.getItem('op_elf_loc_' + view) || ''; }
+  function setLocation(view, val) { localStorage.setItem('op_elf_loc_' + view, val); }
+  function getSiteFilter() { return localStorage.getItem('op_elf_site_workshop') || 'All'; }
+  function setSiteFilter(val) { localStorage.setItem('op_elf_site_workshop', val); }
 
   function showStatus(msg, ok, elId) {
     const el = document.getElementById(elId || 'status');
@@ -221,18 +222,12 @@
     setTimeout(() => { el.className = ''; el.style.display = 'none'; }, 3500);
   }
 
-  // ---- JSONP helper: lets us call the Apps Script API from a different domain ----
+  // ---------- JSONP helper ----------
   function callApi(action, params) {
     return new Promise((resolve, reject) => {
       const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-      window[cbName] = (data) => {
-        delete window[cbName];
-        script.remove();
-        resolve(data);
-      };
-      const query = new URLSearchParams({
-        action, code: getCode() || '', callback: cbName, ...params
-      }).toString();
+      window[cbName] = (data) => { delete window[cbName]; script.remove(); resolve(data); };
+      const query = new URLSearchParams({ action, code: getCode() || '', callback: cbName, ...params }).toString();
       const script = document.createElement('script');
       script.src = API_URL + '?' + query;
       script.onerror = () => { delete window[cbName]; script.remove(); reject(new Error('Network error')); };
@@ -240,19 +235,18 @@
     });
   }
 
+  // ---------- gate ----------
   function saveCode() {
     const val = document.getElementById('codeInput').value.trim();
     if (!val) return;
     localStorage.setItem('scanner_code', val);
     verifyAndEnter();
   }
-
   function signOut() {
     localStorage.removeItem('scanner_code');
     document.getElementById('phone').style.display = 'none';
     document.getElementById('gate').style.display = 'block';
   }
-
   function verifyAndEnter() {
     callApi('config', {}).then(res => {
       if (!res.success) {
@@ -260,35 +254,92 @@
         localStorage.removeItem('scanner_code');
         return;
       }
-      FIELDS = res.fields;
-      LOCATION_FIELD = FIELDS.find(f => f.name === 'Location') || FIELDS[0];
-      populateLocationDropdown();
+      SERVER_CONFIG = res;
       document.getElementById('gate').style.display = 'none';
       document.getElementById('phone').style.display = 'block';
+      initApp();
     }).catch(() => showStatus('Network error, try again', false, 'gateStatus'));
   }
 
-  function populateLocationDropdown() {
-    const sel = document.getElementById('batchLocation');
+  // ---------- app init / view switching ----------
+  function initApp() {
+    currentView = getView();
+    document.getElementById('viewSelect').value = currentView;
+    populateDropdown('locationSelect', SERVER_CONFIG.locationOptions);
+    populateDropdown('siteSelect', ['All'].concat(SERVER_CONFIG.locationOptions));
+    renderView();
+  }
+
+  function populateDropdown(id, options) {
+    const sel = document.getElementById(id);
     sel.innerHTML = '';
-    (LOCATION_FIELD.options || []).forEach(opt => {
+    options.forEach(opt => {
       const o = document.createElement('option');
       o.value = opt; o.textContent = opt;
       sel.appendChild(o);
     });
   }
 
+  function onViewChange() {
+    currentView = document.getElementById('viewSelect').value;
+    setView(currentView);
+    resetScanUI();
+    renderView();
+  }
+
+  function onLocationChange() {
+    setLocation(currentView, document.getElementById('locationSelect').value);
+  }
+
+  function onSiteChange() {
+    setSiteFilter(document.getElementById('siteSelect').value);
+    loadSummary();
+  }
+
+  function renderView() {
+    const isScanRole = (currentView === 'sitehost' || currentView === 'packing' || currentView === 'guiding');
+    document.getElementById('locationBlock').style.display = isScanRole ? 'block' : 'none';
+    document.getElementById('siteBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
+    document.getElementById('scanPanel').style.display = isScanRole ? 'block' : 'none';
+    document.getElementById('workshopPanel').style.display = (currentView === 'workshop') ? 'block' : 'none';
+    document.getElementById('historyBlock').style.display = isScanRole ? 'block' : 'none';
+
+    if (isScanRole) {
+      const savedLoc = getLocation(currentView);
+      if (savedLoc && SERVER_CONFIG.locationOptions.includes(savedLoc)) {
+        document.getElementById('locationSelect').value = savedLoc;
+      } else {
+        document.getElementById('locationSelect').value = SERVER_CONFIG.locationOptions[0];
+        setLocation(currentView, SERVER_CONFIG.locationOptions[0]);
+      }
+    }
+    if (currentView === 'workshop') {
+      document.getElementById('siteSelect').value = getSiteFilter();
+      loadSummary();
+    }
+  }
+
+  function resetScanUI() {
+    pendingBarcode = null;
+    document.getElementById('confirmBlock').style.display = 'none';
+    document.getElementById('followupBlock').style.display = 'none';
+    document.getElementById('historyList').innerHTML = '';
+    if (scanner) { try { scanner.stop(); } catch (e) {} scanner = null; }
+    document.getElementById('reader').style.display = 'none';
+    document.getElementById('startScan').style.display = 'block';
+    document.getElementById('toggleScan').style.display = 'none';
+  }
+
+  // ---------- camera ----------
   function startScanner() {
     document.getElementById('reader').style.display = 'block';
     document.getElementById('startScan').style.display = 'none';
     document.getElementById('toggleScan').style.display = 'block';
-
     scanner = new Html5Qrcode('reader');
     scanner.start(
       { facingMode: 'environment' },
       { fps: 10, qrbox: { width: 240, height: 120 } },
-      onScanSuccess,
-      () => {}
+      onScanSuccess, () => {}
     ).catch(err => {
       showStatus('Camera error: ' + err, false);
       document.getElementById('reader').style.display = 'none';
@@ -297,73 +348,232 @@
     });
   }
   document.getElementById('startScan').addEventListener('click', startScanner);
-
-  function onScanSuccess(decodedText) {
-    if (scanningPaused || pendingBarcode) return;
-    pendingBarcode = decodedText;
-    if (scanner) { try { scanner.pause(true); } catch (e) {} }
-    document.getElementById('confirmCode').textContent = decodedText;
-    document.getElementById('confirmBlock').style.display = 'block';
-  }
-
   document.getElementById('toggleScan').addEventListener('click', () => {
     scanningPaused = !scanningPaused;
     document.getElementById('toggleScan').textContent = scanningPaused ? 'Resume' : 'Pause';
   });
 
-  function acceptScan() {
-    const code = pendingBarcode;
-    hideConfirmBlock();
-    handleBarcode(code);
+  function onScanSuccess(decodedText) {
+    if (scanningPaused || pendingBarcode) return;
+    showConfirm(decodedText);
   }
-
+  function handleManualLookup() {
+    const val = document.getElementById('manualBarcode').value.trim();
+    if (val) { document.getElementById('manualBarcode').value = ''; showConfirm(val); }
+  }
+  function showConfirm(code) {
+    pendingBarcode = code;
+    if (scanner) { try { scanner.pause(true); } catch (e) {} }
+    document.getElementById('confirmCode').textContent = code;
+    document.getElementById('confirmBlock').style.display = 'block';
+  }
   function declineScan() {
-    hideConfirmBlock();
-  }
-
-  function hideConfirmBlock() {
     pendingBarcode = null;
     document.getElementById('confirmBlock').style.display = 'none';
+    resumeCamera();
+  }
+  function resumeCamera() {
     if (scanner) { try { scanner.resume(); } catch (e) {} }
   }
 
-  function handleManualLookup() {
-    const val = document.getElementById('manualBarcode').value.trim();
-    if (val) {
-      document.getElementById('manualBarcode').value = '';
-      pendingBarcode = val;
-      document.getElementById('confirmCode').textContent = val;
-      document.getElementById('confirmBlock').style.display = 'block';
-    }
+  function acceptScan() {
+    const code = pendingBarcode;
+    document.getElementById('confirmBlock').style.display = 'none';
+    if (currentView === 'packing') acceptForPacking(code);
+    else if (currentView === 'sitehost') acceptForSiteHost(code);
+    else if (currentView === 'guiding') acceptForGuiding(code);
   }
 
-  function handleBarcode(code) {
-    const activeLocation = document.getElementById('batchLocation').value;
-    callApi('update', { barcode: code, field: LOCATION_FIELD.name, value: activeLocation })
-      .then(res => addHistoryItem(code, res.success, res.success ? activeLocation : res.error))
-      .catch(err => addHistoryItem(code, false, err.message));
+  // ---------- Packing Day Elf: auto-update Location, resume immediately ----------
+  function acceptForPacking(code) {
+    const loc = document.getElementById('locationSelect').value;
+    callApi('update', { barcode: code, field: 'Location', value: loc })
+      .then(res => { addHistoryItem(code, res.success, res.success ? loc : res.error); pendingBarcode = null; resumeCamera(); })
+      .catch(err => { addHistoryItem(code, false, err.message); pendingBarcode = null; resumeCamera(); });
   }
 
+  // ---------- Site Host Elf: lookup then show editable form ----------
+  let sitehostState = { status: 'Empty', complete: 'Empty' };
+
+  function acceptForSiteHost(code) {
+    callApi('lookup', { barcode: code }).then(res => {
+      if (!res.success || !res.found) {
+        showStatus('Item not found: ' + code, false);
+        pendingBarcode = null; resumeCamera();
+        return;
+      }
+      sitehostState.status = res.data['Status'] || 'Empty';
+      sitehostState.complete = res.data['Complete'] || 'Empty';
+      renderSiteHostForm(code, res.data);
+    }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
+  }
+
+  function renderSiteHostForm(code, data) {
+    const header = document.getElementById('followupHeader');
+    const body = document.getElementById('followupBody');
+    header.textContent = 'Update Entry';
+
+    let html = '<div class="scanned-code">' + code + '</div>';
+    html += '<div class="field-label">Gift Status</div><div class="btn-group" id="statusGroup">';
+    SERVER_CONFIG.statusOptions.forEach(opt => {
+      html += '<button type="button" class="' + (opt === sitehostState.status ? 'selected' : '') + '" onclick="selectBtn(\'status\',\'' + opt + '\')">' + opt + '</button>';
+    });
+    html += '</div>';
+
+    html += '<div class="field-label">Site Host Notes</div><textarea class="field-input" id="notesInput">' + (data['Sitenotes'] || '') + '</textarea>';
+
+    html += '<div class="field-label">Gift Completeness</div><div class="btn-group" id="completeGroup">';
+    SERVER_CONFIG.completeOptions.forEach(opt => {
+      html += '<button type="button" class="' + (opt === sitehostState.complete ? 'selected' : '') + '" onclick="selectBtn(\'complete\',\'' + opt + '\')">' + opt + '</button>';
+    });
+    html += '</div>';
+
+    html += '<div class="field-label">Anything Missing</div><textarea class="field-input" id="missingInput">' + (data['Missing'] || '') + '</textarea>';
+
+    html += '<button class="btn-blue btn-block" style="margin-top:12px;" onclick="submitSiteHostUpdate(\'' + code + '\')">UPDATE</button>';
+
+    body.innerHTML = html;
+    document.getElementById('followupBlock').style.display = 'block';
+  }
+
+  function selectBtn(group, value) {
+    sitehostState[group] = value;
+    const groupEl = document.getElementById(group + 'Group');
+    Array.from(groupEl.children).forEach(btn => {
+      btn.classList.toggle('selected', btn.textContent === value);
+    });
+  }
+
+  function submitSiteHostUpdate(code) {
+    const loc = document.getElementById('locationSelect').value;
+    const fields = {
+      'Location': loc,
+      'Status': sitehostState.status,
+      'Sitenotes': document.getElementById('notesInput').value,
+      'Complete': sitehostState.complete,
+      'Missing': document.getElementById('missingInput').value
+    };
+    callApi('updateFields', { barcode: code, fields: JSON.stringify(fields) })
+      .then(res => {
+        addHistoryItem(code, res.success, res.success ? 'Updated' : res.error);
+        document.getElementById('followupBlock').style.display = 'none';
+        pendingBarcode = null;
+        resumeCamera();
+      })
+      .catch(err => {
+        addHistoryItem(code, false, err.message);
+        document.getElementById('followupBlock').style.display = 'none';
+        pendingBarcode = null;
+        resumeCamera();
+      });
+  }
+
+  // ---------- Guiding Spirit: auto-update Location, show read-only details + Gift Complete ----------
+  function acceptForGuiding(code) {
+    const loc = document.getElementById('locationSelect').value;
+    callApi('update', { barcode: code, field: 'Location', value: loc }).catch(() => {});
+    callApi('lookup', { barcode: code }).then(res => {
+      if (!res.success || !res.found) {
+        showStatus('Item not found: ' + code, false);
+        pendingBarcode = null; resumeCamera();
+        return;
+      }
+      renderGuidingDetails(code, res.data);
+    }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
+  }
+
+  function renderGuidingDetails(code, data) {
+    const header = document.getElementById('followupHeader');
+    const body = document.getElementById('followupBody');
+    header.textContent = 'Entry Details';
+
+    let html = '<div class="scanned-code">' + code + '</div>';
+    html += '<div class="detail-line"><b>Missing:</b> ' + (data['Missing'] || '—') + '</div><hr>';
+    SERVER_CONFIG.detailFields.forEach(f => {
+      const val = data[f];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        html += '<div class="detail-line"><b>' + f + ':</b> ' + val + '</div>';
+      }
+    });
+    html += '<div class="confirm-btns" style="margin-top:12px;">';
+    html += '<button class="btn-blue" style="flex:1;" onclick="submitGiftComplete(\'' + code + '\')">GIFT COMPLETE</button>';
+    html += '<button class="btn-gray" style="flex:1;" onclick="skipFollowup()">Skip</button>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    document.getElementById('followupBlock').style.display = 'block';
+  }
+
+  function submitGiftComplete(code) {
+    callApi('update', { barcode: code, field: 'Complete', value: 'Complete' })
+      .then(res => {
+        addHistoryItem(code, res.success, res.success ? 'Gift Complete' : res.error);
+        document.getElementById('followupBlock').style.display = 'none';
+        pendingBarcode = null;
+        resumeCamera();
+      })
+      .catch(err => {
+        addHistoryItem(code, false, err.message);
+        document.getElementById('followupBlock').style.display = 'none';
+        pendingBarcode = null;
+        resumeCamera();
+      });
+  }
+
+  function skipFollowup() {
+    document.getElementById('followupBlock').style.display = 'none';
+    pendingBarcode = null;
+    resumeCamera();
+  }
+
+  // ---------- shared history log ----------
   function addHistoryItem(code, ok, message) {
-    historyCount++;
-    document.getElementById('placeholderText').style.display = 'none';
     const list = document.getElementById('historyList');
     const item = document.createElement('div');
     item.className = 'history-item ' + (ok ? 'history-ok' : 'history-err');
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    item.innerHTML = '<span class="hcode">' + code + '</span>' +
-      '<span>' + (ok ? '✅ ' + message : '❌ ' + message) + '</span>' +
-      '<span class="htime">' + time + '</span>';
+    item.innerHTML = '<span class="hcode">' + code + '</span><span>' + (ok ? '✅ ' + message : '❌ ' + message) + '</span><span class="htime">' + time + '</span>';
     list.insertBefore(item, list.firstChild);
-    showStatus(ok ? 'Updated ' + code : 'Failed: ' + code, ok);
+    showStatus(ok ? 'Saved: ' + code : 'Failed: ' + code, ok);
   }
 
-  // ---- On load ----
-  if (getCode()) {
-    verifyAndEnter();
-  } else {
-    document.getElementById('gate').style.display = 'block';
+  // ---------- Santa's Workshop ----------
+  function loadSummary() {
+    const loc = 'All'; // Wish Summary always shows the full breakdown
+    const site = getSiteFilter();
+    document.getElementById('summaryList').textContent = 'Loading...';
+    document.getElementById('wishListBox').textContent = 'Loading...';
+    callApi('summary', { location: loc, site: site }).then(res => {
+      if (!res.success) { document.getElementById('summaryList').textContent = res.error; return; }
+      renderSummary(res);
+      renderWishList(res.codes);
+    }).catch(err => { document.getElementById('summaryList').textContent = 'Error: ' + err.message; });
   }
+
+  function renderSummary(res) {
+    let html = '<div><b>Locations:</b></div>';
+    for (let i = 1; i <= 32; i++) {
+      const name = 'Host Site ' + i;
+      const c = res.hostSiteCounts[name] || { rec: 0, loc: 0 };
+      html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
+    }
+    const otherNames = SERVER_CONFIG.locationOptions.filter(n => !/^Host Site \d+$/.test(n));
+    otherNames.forEach(name => {
+      const c = res.otherCounts[name] || 0;
+      html += '<div><b>' + name + '</b> = ' + c + '</div>';
+    });
+    html += '<div class="total-green">All Sites = ' + res.allSitesLocationTotal + '</div>';
+    html += '<div class="total-red">Wishes = ' + res.totalWishes + '</div>';
+    document.getElementById('summaryList').innerHTML = html;
+  }
+
+  function renderWishList(codes) {
+    if (!codes.length) { document.getElementById('wishListBox').textContent = 'No matching entries.'; return; }
+    document.getElementById('wishListBox').innerHTML = codes.map(c => '<div>' + c + '</div>').join('');
+  }
+
+  // ---------- on load ----------
+  if (getCode()) { verifyAndEnter(); } else { document.getElementById('gate').style.display = 'block'; }
 </script>
 </body>
 </html>
