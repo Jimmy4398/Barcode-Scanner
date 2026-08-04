@@ -714,37 +714,44 @@
 
   function renderSummary(res) {
     const isBlankFilter = (getLocationFilter() === 'Blank');
-    const dropoff = getDropoffFilter();
     const curLoc = getLocationFilter();
     const isPinnedLocation = (curLoc !== 'All' && curLoc !== 'Blank');
-    // Once Current Location is pinned to one specific site, the Dropoff
-    // site's own line is just restating the filter you already chose.
-    const suppressDropoffLine = (dropoff !== 'All' && curLoc !== 'All' && curLoc !== 'Blank' && curLoc !== dropoff);
 
     let html = '<div><b>Locations:</b></div>';
-    const siteNames = Object.keys(res.siteCounts).sort(naturalCompare);
     let anyShown = false;
-    siteNames.forEach(name => {
-      if (suppressDropoffLine && name === dropoff) return;
-      const c = res.siteCounts[name];
-      if (c.rec === 0 && c.loc === 0) return;
-      anyShown = true;
-      if (name === curLoc) {
-        // Current Location pinned to this exact site: only the actual count matters.
-        html += '<div><b>' + name + '</b> = ' + c.loc + '</div>';
-      } else {
-        html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
+
+    if (isPinnedLocation) {
+      // Current Location pinned to one specific place (site or packing
+      // station): show only that place's actual count. Anything else
+      // (e.g. other sites these items happened to be recruited from) is
+      // noise once you've drilled down this far.
+      let count = 0;
+      if (res.siteCounts.hasOwnProperty(curLoc)) count = res.siteCounts[curLoc].loc;
+      else if (res.packingCounts.hasOwnProperty(curLoc)) count = res.packingCounts[curLoc];
+      if (count > 0) {
+        html += '<div><b>' + curLoc + '</b> = ' + count + '</div>';
+        anyShown = true;
       }
-    });
+    } else {
+      const siteNames = Object.keys(res.siteCounts).sort(naturalCompare);
+      siteNames.forEach(name => {
+        const c = res.siteCounts[name];
+        if (c.rec === 0 && c.loc === 0) return;
+        anyShown = true;
+        html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
+      });
+
+      SERVER_CONFIG.packingOptions.forEach(name => {
+        const c = res.packingCounts[name] || 0;
+        if (c === 0) return;
+        anyShown = true;
+        html += '<div><b>' + name + '</b> = ' + c + '</div>';
+      });
+    }
+
     if (!anyShown) {
       html += '<div style="color:#666;">No site activity for this selection.</div>';
     }
-
-    SERVER_CONFIG.packingOptions.forEach(name => {
-      const c = res.packingCounts[name] || 0;
-      if (c === 0) return;
-      html += '<div><b>' + name + '</b> = ' + c + '</div>';
-    });
 
     if (!isPinnedLocation) {
       html += '<div class="total-green">All Locations = ' + res.allSitesLocationTotal + '</div>';
