@@ -507,6 +507,7 @@
   function acceptForPacking(code) {
     const loc = document.getElementById('locationSelect').value;
     callApi('update', { barcode: code, field: 'Location', value: loc, view: 'packing' })
+      .then(res => { addHistoryItem(code, res.success, res.success ? loc : res.error); pendingBarcode = null; resumeCamera(); })
       .catch(err => { addHistoryItem(code, false, err.message); pendingBarcode = null; resumeCamera(); });
   }
 
