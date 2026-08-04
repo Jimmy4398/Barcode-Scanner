@@ -42,14 +42,11 @@ const CONFIG = {
   // ---- Google Sign-In ----
   GOOGLE_CLIENT_ID: '533971898412-nhovuse7b5db3bq2n7t5b01552shj8ke.apps.googleusercontent.com',
 
-  // REPLACE WITH YOUR REAL TEAM. Email (lowercase) -> role.
-  // 'admin'     = all 4 views, including Santa's Workshop.
-  // 'sitehost'  = Site Host Elf, Packing Day Elf, Guiding Spirit (no Workshop).
-  // 'volunteer' = Packing Day Elf and Guiding Spirit only.
-  TEAM: {
-    'jim4398.jm@gmail.com': 'admin',
-    'tmateer17@gmail.com': 'volunteer',
-  },
+  // Roster lives in a separate tab (see TEAM_SHEET_NAME) instead of hardcoded
+  // here, so you can add/remove people day-of without touching this file.
+  TEAM_SHEET_NAME: 'Team',
+  TEAM_EMAIL_COLUMN: 'Email',
+  TEAM_ROLE_COLUMN: 'Role',
 
   // Which views each role is allowed to use. Enforced server-side on every
   // request that touches a specific view, not just hidden in the UI.
@@ -176,12 +173,47 @@ function verifyAuth_(idToken) {
   if (info.email_verified !== 'true' && info.email_verified !== true) return { valid: false, error: 'Email not verified by Google.' };
 
   const email = String(info.email || '').toLowerCase().trim();
-  const role = CONFIG.TEAM[email];
+  const role = getTeamRole_(email);
   if (!role) return { valid: false, error: 'This Google account is not approved. Contact your coordinator.' };
 
   const result = { valid: true, email: email, role: role };
   cache.put(cacheKey, JSON.stringify(result), 300); // 5 minutes
   return result;
+}
+
+/**
+ * Looks up a person's role from the "Team" sheet tab (Email | Role columns),
+ * so the roster can be edited live without touching this file or redeploying.
+ * The whole roster is cached for 60 seconds to avoid re-reading the sheet on
+ * every sign-in check; new additions take effect within about a minute.
+ */
+function getTeamRole_(email) {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('team_roster');
+  let roster;
+  if (cached) {
+    roster = JSON.parse(cached);
+  } else {
+    roster = {};
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.TEAM_SHEET_NAME);
+    if (sheet) {
+      const headers = getHeaders_(sheet);
+      const emailCol = headers.indexOf(CONFIG.TEAM_EMAIL_COLUMN);
+      const roleCol = headers.indexOf(CONFIG.TEAM_ROLE_COLUMN);
+      const lastRow = sheet.getLastRow();
+      if (emailCol !== -1 && roleCol !== -1 && lastRow > 1) {
+        const rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+        rows.forEach(row => {
+          const e = String(row[emailCol] || '').toLowerCase().trim();
+          const r = String(row[roleCol] || '').toLowerCase().trim();
+          if (e && r) roster[e] = r;
+        });
+      }
+    }
+    cache.put('team_roster', JSON.stringify(roster), 60); // 1 minute
+  }
+  return roster[email] || null;
 }
 
 function getSheet_() {
