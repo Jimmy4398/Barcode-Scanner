@@ -314,13 +314,19 @@
   }
 
   // ---------- app init / view switching ----------
+  const ROLE_VIEWS = {
+    admin: ['sitehost', 'packing', 'guiding', 'workshop'],
+    sitehost: ['sitehost', 'packing', 'guiding'],
+    volunteer: ['packing', 'guiding'],
+  };
+
   function initApp() {
+    const allowed = ROLE_VIEWS[USER_ROLE] || ['packing'];
     const viewSelect = document.getElementById('viewSelect');
-    if (USER_ROLE !== 'admin') {
-      Array.from(viewSelect.options).forEach(opt => { if (opt.value === 'workshop') opt.remove(); });
-    }
+    Array.from(viewSelect.options).forEach(opt => { if (allowed.indexOf(opt.value) === -1) opt.remove(); });
+
     currentView = getView();
-    if (currentView === 'workshop' && USER_ROLE !== 'admin') currentView = 'packing';
+    if (allowed.indexOf(currentView) === -1) currentView = allowed[0];
     viewSelect.value = currentView;
     renderView();
   }
@@ -500,8 +506,7 @@
   // ---------- Packing Day Elf ----------
   function acceptForPacking(code) {
     const loc = document.getElementById('locationSelect').value;
-    callApi('update', { barcode: code, field: 'Location', value: loc })
-      .then(res => { addHistoryItem(code, res.success, res.success ? loc : res.error); pendingBarcode = null; resumeCamera(); })
+    callApi('update', { barcode: code, field: 'Location', value: loc, view: 'packing' })
       .catch(err => { addHistoryItem(code, false, err.message); pendingBarcode = null; resumeCamera(); });
   }
 
@@ -574,7 +579,7 @@
   // ---------- Guiding Spirit ----------
   function acceptForGuiding(code) {
     const loc = document.getElementById('locationSelect').value;
-    callApi('update', { barcode: code, field: 'Location', value: loc }).catch(() => {});
+    callApi('update', { barcode: code, field: 'Location', value: loc, view: 'guiding' }).catch(() => {});
     callApi('lookup', { barcode: code, view: 'guiding' }).then(res => {
       renderGuidingDetails(code, res.data);
     }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
@@ -602,7 +607,7 @@
   }
 
   function submitGiftComplete(code) {
-    callApi('update', { barcode: code, field: 'Complete', value: 'Complete' })
+    callApi('update', { barcode: code, field: 'Complete', value: 'Complete', view: 'guiding' })
       .then(res => {
         addHistoryItem(code, res.success, res.success ? 'Gift Complete' : res.error);
         document.getElementById('followupBlock').style.display = 'none';
