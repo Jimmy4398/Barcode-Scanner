@@ -230,11 +230,23 @@
     setTimeout(() => { el.className = ''; el.style.display = 'none'; }, 3500);
   }
 
-  // ---------- JSONP helper ----------
-  function callApi(action, params) {
+  // ---------- JSONP helper (with timeout + one automatic retry) ----------
+  function callApiOnce(action, params) {
     return new Promise((resolve, reject) => {
       const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+      let settled = false;
+
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        delete window[cbName]; script.remove();
+        reject(new Error('Request timed out'));
+      }, 12000);
+
       window[cbName] = (data) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
         delete window[cbName]; script.remove();
         if (data && data.authError) { forceSignOut(data.error || 'Your sign-in expired. Please sign in again.'); }
         resolve(data);
@@ -242,8 +254,25 @@
       const query = new URLSearchParams({ action, idToken: ID_TOKEN || '', callback: cbName, ...params }).toString();
       const script = document.createElement('script');
       script.src = API_URL + '?' + query;
-      script.onerror = () => { delete window[cbName]; script.remove(); reject(new Error('Network error')); };
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        delete window[cbName]; script.remove();
+        reject(new Error('Network error'));
+      };
       document.body.appendChild(script);
+    });
+  }
+
+  function callApi(action, params, retriesLeft) {
+    if (retriesLeft === undefined) retriesLeft = 1;
+    return callApiOnce(action, params).catch(err => {
+      if (retriesLeft > 0) {
+        return new Promise(resolve => setTimeout(resolve, 1200))
+          .then(() => callApi(action, params, retriesLeft - 1));
+      }
+      throw err;
     });
   }
 
