@@ -399,7 +399,7 @@
         setLocation(currentView, options[0]);
       }
     } else if (currentView === 'workshop') {
-      const locOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      const locOptions = ['All', 'None'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = getLocationFilter();
 
@@ -703,7 +703,7 @@
       populateDropdown('dropoffSelect', dropoffOptions);
       document.getElementById('dropoffSelect').value = dropoffOptions.includes(dropoff) ? dropoff : 'All';
 
-      const locOptions = ['All'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      const locOptions = ['All', 'None'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = locOptions.includes(loc) ? loc : 'All';
 
