@@ -716,6 +716,7 @@
     const isBlankFilter = (getLocationFilter() === 'Blank');
     const dropoff = getDropoffFilter();
     const curLoc = getLocationFilter();
+    const isPinnedLocation = (curLoc !== 'All' && curLoc !== 'Blank');
     // Once Current Location is pinned to one specific site, the Dropoff
     // site's own line is just restating the filter you already chose.
     const suppressDropoffLine = (dropoff !== 'All' && curLoc !== 'All' && curLoc !== 'Blank' && curLoc !== dropoff);
@@ -728,7 +729,12 @@
       const c = res.siteCounts[name];
       if (c.rec === 0 && c.loc === 0) return;
       anyShown = true;
-      html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
+      if (name === curLoc) {
+        // Current Location pinned to this exact site: only the actual count matters.
+        html += '<div><b>' + name + '</b> = ' + c.loc + ', ' + c.loc + '</div>';
+      } else {
+        html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
+      }
     });
     if (!anyShown) {
       html += '<div style="color:#666;">No site activity for this selection.</div>';
@@ -739,8 +745,11 @@
       if (c === 0) return;
       html += '<div><b>' + name + '</b> = ' + c + '</div>';
     });
-    html += '<div class="total-green">All Sites = ' + res.allSitesLocationTotal + '</div>';
-    html += '<div class="total-red">Wishes = ' + res.totalWishes + '</div>';
+
+    if (!isPinnedLocation) {
+      html += '<div class="total-green">All Locations = ' + res.allSitesLocationTotal + '</div>';
+      html += '<div class="total-red">Wishes = ' + res.totalWishes + '</div>';
+    }
     document.getElementById('summaryList').innerHTML = html;
   }
 
