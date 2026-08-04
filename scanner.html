@@ -673,7 +673,6 @@
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     item.innerHTML = '<span class="hcode">' + code + '</span><span>' + (ok ? '✅ ' + message : '❌ ' + message) + '</span><span class="htime">' + time + '</span>';
     list.insertBefore(item, list.firstChild);
-    showStatus(ok ? 'Saved: ' + code : 'Failed: ' + code, ok);
   }
 
   // ---------- Santa's Workshop ----------
