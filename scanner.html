@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Operation Elf Scanner</title>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eef1f0; }
@@ -75,16 +76,15 @@
 </head>
 <body>
 
-  <!-- ACCESS CODE GATE -->
+  <!-- SIGN-IN GATE -->
   <div id="gate" style="display:none;">
     <h1 class="title">🎁 Operation Elf</h1>
     <div class="block">
-      <div class="block-header">Access Code</div>
-      <div class="block-body">
-        <p style="font-size:14px;color:#333;margin-top:0;">Enter the code your team shared with you.</p>
-        <input type="password" id="codeInput" placeholder="Access code">
-        <button class="btn-primary btn-block" onclick="saveCode()">Continue</button>
-        <div id="gateStatus" style="margin-top:8px;"></div>
+      <div class="block-header">Sign In</div>
+      <div class="block-body" style="text-align:center;">
+        <p style="font-size:14px;color:#333;margin-top:0;">Sign in with your approved Google account to continue.</p>
+        <div id="googleSignInBtn" style="display:flex;justify-content:center;margin-top:10px;"></div>
+        <div id="gateStatus" style="margin-top:10px;"></div>
       </div>
     </div>
   </div>
@@ -186,7 +186,7 @@
       </div>
     </div>
 
-    <div id="footerLink"><a href="#" onclick="signOut();return false;">Use a different code</a></div>
+    <div id="footerLink"><span id="signedInAs" style="display:block;font-size:11px;color:#0b3d23;margin-bottom:4px;"></span><a href="#" onclick="signOut();return false;">Sign out</a></div>
   </div>
 
 <script>
@@ -194,20 +194,24 @@
   const API_URL = 'https://script.google.com/macros/s/AKfycby8QcEYA5u8_WiPD7ldafBbGMFuA4YWhNMx45fH0_TmgvDgj2hpXhocCcRucQ43QJdd/exec';
   // =========================================================
 
+  const GOOGLE_CLIENT_ID = '533971898412-nhovuse7b5db3bq2n7t5b01552shj8ke.apps.googleusercontent.com';
+
   const PACKING_COLORS = { yellow: '#FFEB3B', blue: '#60A5FA', pink: '#F472B6', green: '#4ADE80' };
   const INCOMPLETE_COLOR = '#B91C1C';
   const FALLBACK_COLOR = '#D1D5DB';
   const GUIDING_LOCATION = 'Packing Day (Spirit)';
 
   let SERVER_CONFIG = null;
+  let ID_TOKEN = null;
+  let USER_ROLE = null;
+  let USER_EMAIL = null;
   let currentView = 'packing';
   let pendingBarcode = null;
   let currentItemData = null;
   let scanner = null;
   let scanningPaused = false;
 
-  // ---------- storage helpers ----------
-  function getCode() { return localStorage.getItem('scanner_code'); }
+  // ---------- storage helpers (view/location preferences only \u2014 not auth) ----------
   function getView() { return localStorage.getItem('op_elf_view') || 'packing'; }
   function setView(v) { localStorage.setItem('op_elf_view', v); }
   function getLocation(view) { return localStorage.getItem('op_elf_loc_' + view) || ''; }
@@ -230,8 +234,12 @@
   function callApi(action, params) {
     return new Promise((resolve, reject) => {
       const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-      window[cbName] = (data) => { delete window[cbName]; script.remove(); resolve(data); };
-      const query = new URLSearchParams({ action, code: getCode() || '', callback: cbName, ...params }).toString();
+      window[cbName] = (data) => {
+        delete window[cbName]; script.remove();
+        if (data && data.authError) { forceSignOut(data.error || 'Your sign-in expired. Please sign in again.'); }
+        resolve(data);
+      };
+      const query = new URLSearchParams({ action, idToken: ID_TOKEN || '', callback: cbName, ...params }).toString();
       const script = document.createElement('script');
       script.src = API_URL + '?' + query;
       script.onerror = () => { delete window[cbName]; script.remove(); reject(new Error('Network error')); };
@@ -239,37 +247,57 @@
     });
   }
 
-  // ---------- gate ----------
-  function saveCode() {
-    const val = document.getElementById('codeInput').value.trim();
-    if (!val) return;
-    localStorage.setItem('scanner_code', val);
-    verifyAndEnter();
-  }
-  function signOut() {
-    localStorage.removeItem('scanner_code');
-    document.getElementById('phone').style.display = 'none';
+  // ---------- Google Sign-In gate ----------
+  function initGoogleSignIn() {
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+    google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), { theme: 'outline', size: 'large', text: 'signin_with' });
     document.getElementById('gate').style.display = 'block';
   }
-  function verifyAndEnter() {
+
+  function handleCredentialResponse(response) {
+    ID_TOKEN = response.credential;
     callApi('config', {}).then(res => {
       if (!res.success) {
-        showStatus(res.error || 'Invalid code', false, 'gateStatus');
-        localStorage.removeItem('scanner_code');
+        showStatus(res.error || 'Not authorized for this app.', false, 'gateStatus');
+        ID_TOKEN = null;
         return;
       }
       SERVER_CONFIG = res;
+      USER_ROLE = res.role;
+      USER_EMAIL = res.email;
+      document.getElementById('signedInAs').textContent = 'Signed in as ' + USER_EMAIL;
       document.getElementById('gate').style.display = 'none';
       document.getElementById('phone').style.display = 'block';
       initApp();
     }).catch(() => showStatus('Network error, try again', false, 'gateStatus'));
   }
 
+  function signOut() {
+    ID_TOKEN = null; USER_ROLE = null; USER_EMAIL = null; SERVER_CONFIG = null;
+    if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+    document.getElementById('phone').style.display = 'none';
+    document.getElementById('gate').style.display = 'block';
+  }
+
+  function forceSignOut(message) {
+    signOut();
+    showStatus(message, false, 'gateStatus');
+  }
+
   // ---------- app init / view switching ----------
   function initApp() {
+    const viewSelect = document.getElementById('viewSelect');
+    if (USER_ROLE !== 'admin') {
+      Array.from(viewSelect.options).forEach(opt => { if (opt.value === 'workshop') opt.remove(); });
+    }
     currentView = getView();
-    document.getElementById('viewSelect').value = currentView;
+    if (currentView === 'workshop' && USER_ROLE !== 'admin') currentView = 'packing';
+    viewSelect.value = currentView;
     renderView();
+  }
+
+  function naturalCompare(a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
   }
 
   function populateDropdown(id, options) {
@@ -336,7 +364,7 @@
         setLocation(currentView, options[0]);
       }
     } else if (currentView === 'workshop') {
-      const locOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions).concat(SERVER_CONFIG.packingOptions);
+      const locOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = getLocationFilter();
 
@@ -403,8 +431,7 @@
       document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
       document.getElementById('confirmCode').textContent = code + ' (checking...)';
       document.getElementById('confirmBlock').style.display = 'block';
-      callApi('lookup', { barcode: code }).then(res => {
-        let color = FALLBACK_COLOR;
+      callApi('lookup', { barcode: code, view: 'packing' }).then(res => {
         if (res.success && res.found) {
           const complete = (res.data['Complete'] || '').toLowerCase();
           const table = (res.data['Packing Table'] || '').toLowerCase();
@@ -453,13 +480,7 @@
   let sitehostState = { status: 'Empty', complete: 'Empty' };
 
   function acceptForSiteHost(code) {
-    callApi('lookup', { barcode: code }).then(res => {
-      if (!res.success || !res.found) {
-        showStatus('Item not found: ' + code, false);
-        pendingBarcode = null; resumeCamera();
-        return;
-      }
-      sitehostState.status = res.data['Status'] || 'Empty';
+    callApi('lookup', { barcode: code, view: 'sitehost' }).then(res => {
       sitehostState.complete = res.data['Complete'] || 'Empty';
       renderSiteHostForm(code, res.data);
     }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
@@ -525,13 +546,7 @@
   function acceptForGuiding(code) {
     const loc = document.getElementById('locationSelect').value;
     callApi('update', { barcode: code, field: 'Location', value: loc }).catch(() => {});
-    callApi('lookup', { barcode: code }).then(res => {
-      if (!res.success || !res.found) {
-        showStatus('Item not found: ' + code, false);
-        pendingBarcode = null; resumeCamera();
-        return;
-      }
-      currentItemData = res.data;
+    callApi('lookup', { barcode: code, view: 'guiding' }).then(res => {
       renderGuidingDetails(code, res.data);
     }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
   }
@@ -631,7 +646,7 @@
       populateDropdown('dropoffSelect', dropoffOptions);
       document.getElementById('dropoffSelect').value = dropoffOptions.includes(dropoff) ? dropoff : 'All';
 
-      const locOptions = ['All'].concat(res.recSiteOptions).concat(SERVER_CONFIG.packingOptions);
+      const locOptions = ['All'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = locOptions.includes(loc) ? loc : 'All';
 
@@ -642,7 +657,7 @@
 
   function renderSummary(res) {
     let html = '<div><b>Locations:</b></div>';
-    const siteNames = Object.keys(res.siteCounts).sort();
+    const siteNames = Object.keys(res.siteCounts).sort(naturalCompare);
     if (siteNames.length) {
       siteNames.forEach(name => {
         const c = res.siteCounts[name];
@@ -668,8 +683,7 @@
     document.getElementById('wishListBox').innerHTML = codes.map(c => '<div>' + c + '</div>').join('');
   }
 
-  // ---------- on load ----------
-  if (getCode()) { verifyAndEnter(); } else { document.getElementById('gate').style.display = 'block'; }
+  // Gate display is triggered by the Google script's onload -> initGoogleSignIn()
 </script>
 </body>
 </html>
