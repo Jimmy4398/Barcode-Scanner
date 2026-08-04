@@ -1,433 +1,738 @@
-/**
- * OPERATION ELF SCANNER APP - backend API
- * -------------------------------------------------------
- * Backend only. The actual scanner page (with camera) lives on a separate
- * website (e.g. GitHub Pages) because Apps Script's own pages run inside a
- * sandboxed iframe that browsers block camera access from.
- *
- * Access control: real Google Sign-In. The external page sends a Google
- * ID token with every request; this script verifies it against Google's
- * servers, then checks the signed-in email against CONFIG.TEAM below.
- */
-const CONFIG = {
-  SHEET_NAME: 'Sheet1',
-  CODE_COLUMN: 'Code',
-  BARCODE_COLUMN: 'Code',        // matched against what's actually printed on barcodes now
-  LOCATION_COLUMN: 'Location',   // "Current Location" in the UI
-  REC_SITE_COLUMN: 'Rec Site',   // "Dropoff Location" in the UI
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Operation Elf Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleSignIn()"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eef1f0; }
+  #phone { max-width: 420px; margin: 16px auto; background: #1AA260; border: 5px solid #111827; border-radius: 42px; padding: 20px 18px 28px; min-height: 90vh; }
+  h1.title { text-align: center; font-size: 24px; color: #111827; margin: 4px 0 4px; font-weight: 700; }
+  p.subtitle { text-align: center; font-size: 11px; color: #0b3d23; margin: 0 0 14px; }
 
-  PACKING_OPTIONS: [
-    'Packing Day (Check-in)',
-    'Packing Day (Spirit)',
-    'Packing Day (Packing)',
-    'Packing Day (Yellow Table)',
-    'Packing Day (Blue Table)',
-    'Packing Day (Pink Table)',
-    'Packing Day (Green Table)',
-    'Packing Day (Truck)'
-  ],
+  .block { margin-bottom: 14px; }
+  .block-header { background: #E8262B; color: #111827; border: 3px solid #111827; border-bottom: none; border-radius: 10px 10px 0 0; padding: 6px 12px; font-size: 14px; font-weight: 700; }
+  .block-body { background: white; border: 3px solid #111827; border-radius: 0 0 10px 10px; padding: 10px; overflow: hidden; }
+  .block-body.no-header { border-radius: 10px; }
 
-  STATUS_COLUMN: 'Status',
-  STATUS_OPTIONS: ['Empty', 'Pending', 'Received'],
-  NOTES_COLUMN: 'Sitenotes',
-  COMPLETE_COLUMN: 'Complete',
-  COMPLETE_OPTIONS: ['Empty', 'Partial', 'Complete'],
-  MISSING_COLUMN: 'Missing',
-  DETAIL_FIELDS: ['Age', 'Gender', 'Wish', 'Color', 'Shirt', 'Pants', 'Shoes', 'GC'],
+  select.dd {
+    width: 100%; background: #FFEB3B; border: none; font-size: 15px; font-weight: 600;
+    color: #111827; padding: 10px 8px; appearance: none; -webkit-appearance: none;
+  }
 
-  LOG_UPDATED_AT: true,
-  UPDATED_AT_COLUMN: 'Last Updated At',
-  UPDATED_BY_COLUMN: 'Last Updated By',
+  #reader { width: 100%; max-height: 240px; border-radius: 6px; overflow: hidden; background: #000; }
+  #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
 
-  // ---- Google Sign-In ----
-  GOOGLE_CLIENT_ID: '533971898412-nhovuse7b5db3bq2n7t5b01552shj8ke.apps.googleusercontent.com',
+  button { font-size: 14px; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; }
+  .btn-block { width: 100%; }
+  .btn-primary { background: #111827; color: white; }
+  .btn-gray { background: #808080; color: white; }
+  .btn-blue { background: #1e88e5; color: white; }
+  .btn-accept { background: #16a34a; color: white; flex: 1; }
+  .btn-decline { background: #dc2626; color: white; flex: 1; }
+  .confirm-btns { display: flex; gap: 8px; margin-top: 8px; }
 
-  // Roster lives in a separate tab (see TEAM_SHEET_NAME) instead of hardcoded
-  // here, so you can add/remove people day-of without touching this file.
-  TEAM_SHEET_NAME: 'Team',
-  TEAM_EMAIL_COLUMN: 'Email',
-  TEAM_ROLE_COLUMN: 'Role',
+  .manual-row { display: flex; gap: 8px; margin-top: 10px; }
+  .manual-row input { flex: 1; padding: 9px 10px; font-size: 15px; border-radius: 8px; border: 2px solid #111827; }
 
-  // Which views each role is allowed to use. Enforced server-side on every
-  // request that touches a specific view, not just hidden in the UI.
-  ROLE_VIEWS: {
+  #status { font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; display: none; text-align: center; font-weight: 700; }
+  .status-ok { background: #dcfce7; color: #166534; display: block !important; }
+  .status-err { background: #fee2e2; color: #991b1b; display: block !important; }
+
+  #confirmBlock, #followupBlock, #resultBlock { display: none; }
+  .scanned-code { font-size: 22px; font-weight: 800; text-align: center; margin: 6px 0 8px; word-break: break-all; background: #D1D5DB; padding: 8px; border-radius: 6px; }
+
+  .btn-group { display: flex; gap: 6px; margin: 6px 0 12px; }
+  .btn-group button { flex: 1; background: #e5e7eb; color: #111827; border: 2px solid #111827; padding: 8px 4px; font-size: 13px; }
+  .btn-group button.selected { background: #111827; color: white; }
+  .field-label { font-size: 12px; font-weight: 700; color: #333; margin: 8px 0 2px; }
+  textarea.field-input { width: 100%; border: 2px solid #111827; border-radius: 6px; padding: 8px; font-size: 14px; min-height: 60px; resize: vertical; font-family: inherit; }
+
+  .detail-line { font-size: 14px; margin-bottom: 4px; }
+  .detail-line b { color: #111827; }
+
+  #historyList { max-height: 220px; overflow-y: auto; }
+  .history-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+  .history-ok { background: #dcfce7; }
+  .history-err { background: #fee2e2; }
+  .history-item .hcode { font-weight: 700; }
+  .history-item .htime { font-size: 11px; color: #555; }
+
+  #summaryList, #wishListBox { max-height: 260px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+  #summaryList .total-green { color: #166534; font-weight: 800; }
+  #summaryList .total-red { color: #991b1b; font-weight: 800; }
+  #summaryList b { font-weight: 700; }
+
+  #footerLink { text-align: center; margin-top: 10px; }
+  #footerLink a { color: #0b3d23; font-size: 12px; }
+
+  #gate { max-width: 360px; margin: 60px auto; padding: 0 16px; }
+  #gate .block-body { text-align: center; }
+  #gate input[type="password"] { width: 100%; padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid #111827; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+  <!-- SIGN-IN GATE -->
+  <div id="gate" style="display:none;">
+    <h1 class="title">🎁 Operation Elf</h1>
+    <div class="block">
+      <div class="block-header">Sign In</div>
+      <div class="block-body" style="text-align:center;">
+        <p style="font-size:14px;color:#333;margin-top:0;">Sign in with your approved Google account to continue.</p>
+        <div id="googleSignInBtn" style="display:flex;justify-content:center;margin-top:10px;"></div>
+        <div id="gateStatus" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="phone" style="display:none;">
+    <h1 class="title">🎁 Operation Elf</h1>
+    <p class="subtitle">Making Holiday Magic for Children in Need!</p>
+
+    <div id="status"></div>
+
+    <div class="block">
+      <div class="block-header">View:</div>
+      <div class="block-body" style="padding:0;">
+        <select id="viewSelect" class="dd" onchange="onViewChange()">
+          <option value="sitehost">Site Host Elf</option>
+          <option value="packing">Packing Day Elf</option>
+          <option value="guiding">Guiding Spirit</option>
+          <option value="workshop">Santa's Workshop</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="block" id="dropoffBlock" style="display:none;">
+      <div class="block-header">Dropoff Location:</div>
+      <div class="block-body" style="padding:0;">
+        <select id="dropoffSelect" class="dd" onchange="onDropoffChange()"></select>
+      </div>
+    </div>
+
+    <div class="block" id="locationBlock">
+      <div class="block-header">Current Location:</div>
+      <div class="block-body" style="padding:0;">
+        <select id="locationSelect" class="dd" onchange="onLocationChange()"></select>
+      </div>
+    </div>
+
+    <div class="block" id="siteBlock" style="display:none;">
+      <div class="block-header">Site:</div>
+      <div class="block-body" style="padding:0;">
+        <select id="siteSelect" class="dd" onchange="onSiteChange()"></select>
+      </div>
+    </div>
+
+    <div id="scanPanel" style="display:none;">
+      <div class="block">
+        <div class="block-header">SCAN BARCODE</div>
+        <div class="block-body">
+          <div id="reader" style="display:none;"></div>
+          <button class="btn-primary btn-block" id="startScan">▶ Start Scanning</button>
+          <button class="btn-gray btn-block" id="toggleScan" style="display:none;">Pause</button>
+
+          <div id="confirmBlock">
+            <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Scanned:</div>
+            <div class="scanned-code" id="confirmCode"></div>
+            <div class="confirm-btns">
+              <button class="btn-accept" onclick="acceptScan()">✅ Accept</button>
+              <button class="btn-decline" onclick="declineScan()">❌ Decline</button>
+            </div>
+          </div>
+
+          <div id="resultBlock">
+            <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Send to:</div>
+            <div class="scanned-code" id="resultCode"></div>
+            <button class="btn-primary btn-block" onclick="continueAfterResult()">Continue</button>
+          </div>
+
+          <div class="manual-row">
+            <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
+            <button class="btn-gray" onclick="handleManualLookup()">Submit</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="followupBlock" class="block">
+        <div class="block-header" id="followupHeader">Details</div>
+        <div class="block-body" id="followupBody"></div>
+      </div>
+
+      <div class="block" id="historyBlock">
+        <div class="block-body no-header">
+          <div style="font-size:12px;color:#666;margin-bottom:6px;">Recent scans</div>
+          <div id="historyList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="workshopPanel" style="display:none;">
+      <button class="btn-blue btn-block" onclick="loadSummary()" style="margin-bottom:10px;">🔄 Refresh</button>
+
+      <div class="block">
+        <div class="block-header">Wish Summary</div>
+        <div class="block-body" id="summaryList">Tap Refresh to load.</div>
+      </div>
+
+      <div class="block">
+        <div class="block-header">Wish List</div>
+        <div class="block-body" id="wishListBox">Tap Refresh to load.</div>
+      </div>
+    </div>
+
+    <div id="footerLink"><span id="signedInAs" style="display:block;font-size:11px;color:#0b3d23;margin-bottom:4px;"></span><a href="#" onclick="signOut();return false;">Sign out</a></div>
+  </div>
+
+<script>
+  // ======= Apps Script Web App URL (ends in /exec) =======
+  const API_URL = 'https://script.google.com/macros/s/AKfycby8QcEYA5u8_WiPD7ldafBbGMFuA4YWhNMx45fH0_TmgvDgj2hpXhocCcRucQ43QJdd/exec';
+  // =========================================================
+
+  const GOOGLE_CLIENT_ID = '533971898412-nhovuse7b5db3bq2n7t5b01552shj8ke.apps.googleusercontent.com';
+
+  const PACKING_COLORS = { yellow: '#FFEB3B', blue: '#60A5FA', pink: '#F472B6', green: '#4ADE80' };
+  const INCOMPLETE_COLOR = '#B91C1C';
+  const FALLBACK_COLOR = '#D1D5DB';
+  const GUIDING_LOCATION = 'Packing Day (Spirit)';
+
+  let SERVER_CONFIG = null;
+  let ID_TOKEN = null;
+  let USER_ROLE = null;
+  let USER_EMAIL = null;
+  let currentView = 'packing';
+  let pendingBarcode = null;
+  let currentItemData = null;
+  let scanner = null;
+  let scanningPaused = false;
+
+  // ---------- storage helpers (view/location preferences only \u2014 not auth) ----------
+  function getView() { return localStorage.getItem('op_elf_view') || 'packing'; }
+  function setView(v) { localStorage.setItem('op_elf_view', v); }
+  function getLocation(view) { return localStorage.getItem('op_elf_loc_' + view) || ''; }
+  function setLocation(view, val) { localStorage.setItem('op_elf_loc_' + view, val); }
+  function getLocationFilter() { return localStorage.getItem('op_elf_locfilter_workshop') || 'All'; }
+  function setLocationFilter(val) { localStorage.setItem('op_elf_locfilter_workshop', val); }
+  function getSiteFilter() { return localStorage.getItem('op_elf_site_workshop') || 'All'; }
+  function setSiteFilter(val) { localStorage.setItem('op_elf_site_workshop', val); }
+  function getDropoffFilter() { return localStorage.getItem('op_elf_dropoff_workshop') || 'All'; }
+  function setDropoffFilter(val) { localStorage.setItem('op_elf_dropoff_workshop', val); }
+
+  function showStatus(msg, ok, elId) {
+    const el = document.getElementById(elId || 'status');
+    el.textContent = msg;
+    el.className = ok ? 'status-ok' : 'status-err';
+    setTimeout(() => { el.className = ''; el.style.display = 'none'; }, 3500);
+  }
+
+  // ---------- JSONP helper (with timeout + one automatic retry) ----------
+  function callApiOnce(action, params) {
+    return new Promise((resolve, reject) => {
+      const cbName = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+      let settled = false;
+
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        delete window[cbName]; script.remove();
+        reject(new Error('Request timed out'));
+      }, 12000);
+
+      window[cbName] = (data) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        delete window[cbName]; script.remove();
+        if (data && data.authError) { forceSignOut(data.error || 'Your sign-in expired. Please sign in again.'); }
+        resolve(data);
+      };
+      const query = new URLSearchParams({ action, idToken: ID_TOKEN || '', callback: cbName, ...params }).toString();
+      const script = document.createElement('script');
+      script.src = API_URL + '?' + query;
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        delete window[cbName]; script.remove();
+        reject(new Error('Network error'));
+      };
+      document.body.appendChild(script);
+    });
+  }
+
+  function callApi(action, params, retriesLeft) {
+    if (retriesLeft === undefined) retriesLeft = 1;
+    return callApiOnce(action, params).catch(err => {
+      if (retriesLeft > 0) {
+        return new Promise(resolve => setTimeout(resolve, 1200))
+          .then(() => callApi(action, params, retriesLeft - 1));
+      }
+      throw err;
+    });
+  }
+
+  // ---------- Google Sign-In gate ----------
+  function initGoogleSignIn() {
+    google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+    google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), { theme: 'outline', size: 'large', text: 'signin_with' });
+    document.getElementById('gate').style.display = 'block';
+  }
+
+  function handleCredentialResponse(response) {
+    ID_TOKEN = response.credential;
+    callApi('config', {}).then(res => {
+      if (!res.success) {
+        showStatus(res.error || 'Not authorized for this app.', false, 'gateStatus');
+        ID_TOKEN = null;
+        return;
+      }
+      SERVER_CONFIG = res;
+      USER_ROLE = res.role;
+      USER_EMAIL = res.email;
+      document.getElementById('signedInAs').textContent = 'Signed in as ' + USER_EMAIL;
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('phone').style.display = 'block';
+      initApp();
+    }).catch(() => showStatus('Network error, try again', false, 'gateStatus'));
+  }
+
+  function signOut() {
+    ID_TOKEN = null; USER_ROLE = null; USER_EMAIL = null; SERVER_CONFIG = null;
+    if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+    document.getElementById('phone').style.display = 'none';
+    document.getElementById('gate').style.display = 'block';
+  }
+
+  function forceSignOut(message) {
+    signOut();
+    showStatus(message, false, 'gateStatus');
+  }
+
+  // ---------- app init / view switching ----------
+  const ROLE_VIEWS = {
     admin: ['sitehost', 'packing', 'guiding', 'workshop'],
     sitehost: ['sitehost', 'packing', 'guiding'],
     volunteer: ['packing', 'guiding'],
-  },
-
-  // Per-role field whitelist for 'lookup' responses, so the browser never
-  // receives sensitive columns (Email, Phone, etc.) a given role doesn't need.
-  LOOKUP_FIELDS_BY_VIEW: {
-    sitehost: ['Code', 'Status', 'Sitenotes', 'Complete', 'Missing'],
-    guiding: ['Code', 'Missing', 'Age', 'Gender', 'Wish', 'Color', 'Shirt', 'Pants', 'Shoes', 'GC', 'Packing Table'],
-    packing: ['Complete', 'Packing Table'],
-  },
-};
-
-function hasViewAccess_(role, view) {
-  const allowed = CONFIG.ROLE_VIEWS[role] || [];
-  return allowed.indexOf(view) !== -1;
-}
-
-function doGet(e) {
-  const callback = (e.parameter.callback || 'callback').replace(/[^a-zA-Z0-9_]/g, '');
-  let payload;
-
-  try {
-    const auth = verifyAuth_(e.parameter.idToken);
-    if (!auth.valid) {
-      payload = { success: false, error: auth.error, authError: true };
-    } else {
-      switch (e.parameter.action) {
-        case 'config': {
-          const sheet = getSheet_();
-          const headers = getHeaders_(sheet);
-          payload = {
-            success: true,
-            role: auth.role,
-            email: auth.email,
-            recSiteOptions: getUniqueColumnValues_(sheet, headers, CONFIG.REC_SITE_COLUMN),
-            packingOptions: CONFIG.PACKING_OPTIONS,
-            statusOptions: CONFIG.STATUS_OPTIONS,
-            completeOptions: CONFIG.COMPLETE_OPTIONS,
-            detailFields: CONFIG.DETAIL_FIELDS,
-          };
-          break;
-        }
-        case 'lookup':
-          if (!hasViewAccess_(auth.role, e.parameter.view)) {
-            payload = { success: false, error: 'Not authorized for this view.' };
-          } else {
-            payload = lookupItem_(e.parameter.barcode, e.parameter.view);
-          }
-          break;
-        case 'update':
-          if (!hasViewAccess_(auth.role, e.parameter.view)) {
-            payload = { success: false, error: 'Not authorized for this view.' };
-          } else {
-            payload = updateItem_(e.parameter.barcode, e.parameter.field, e.parameter.value, auth.email);
-          }
-          break;
-        case 'updateFields':
-          if (!hasViewAccess_(auth.role, 'sitehost')) {
-            payload = { success: false, error: 'Not authorized for Site Host Elf.' };
-          } else {
-            payload = updateFields_(e.parameter.barcode, JSON.parse(e.parameter.fields || '{}'), auth.email);
-          }
-          break;
-        case 'summary':
-          if (!hasViewAccess_(auth.role, 'workshop')) {
-            payload = { success: false, error: "Not authorized for Santa's Workshop." };
-          } else {
-            payload = getSummary_(e.parameter.location || 'All', e.parameter.site || 'All', e.parameter.dropoff || 'All');
-          }
-          break;
-        default:
-          payload = { success: false, error: 'Unknown action.' };
-      }
-    }
-  } catch (err) {
-    payload = { success: false, error: err.message };
-  }
-
-  const body = callback + '(' + JSON.stringify(payload) + ')';
-  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
-}
-
-/**
- * Verifies a Google ID token by asking Google's own tokeninfo endpoint to
- * validate its signature, then checks the signed-in email against CONFIG.TEAM.
- *
- * Performance: the same ID token is reused for every request during a
- * person's session, but re-verifying against Google's servers on every
- * single scan adds several seconds of network latency each time. We cache
- * a successful verification for 5 minutes (well under the token's own ~1hr
- * lifetime), so only the first request in a while pays that network cost.
- */
-function verifyAuth_(idToken) {
-  if (!idToken) return { valid: false, error: 'Not signed in.' };
-
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'auth_' + Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, idToken)
-    .map(b => (b < 0 ? b + 256 : b).toString(16).padStart(2, '0')).join('');
-
-  const cached = cache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-
-  let info;
-  try {
-    const resp = UrlFetchApp.fetch(
-      'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
-      { muteHttpExceptions: true }
-    );
-    if (resp.getResponseCode() !== 200) {
-      return { valid: false, error: 'Sign-in expired. Please sign in again.' };
-    }
-    info = JSON.parse(resp.getContentText());
-  } catch (err) {
-    return { valid: false, error: 'Could not verify sign-in.' };
-  }
-
-  if (info.aud !== CONFIG.GOOGLE_CLIENT_ID) return { valid: false, error: 'Token was not issued for this app.' };
-  if (info.email_verified !== 'true' && info.email_verified !== true) return { valid: false, error: 'Email not verified by Google.' };
-
-  const email = String(info.email || '').toLowerCase().trim();
-  const role = getTeamRole_(email);
-  if (!role) return { valid: false, error: 'This Google account is not approved. Contact your coordinator.' };
-
-  const result = { valid: true, email: email, role: role };
-  cache.put(cacheKey, JSON.stringify(result), 300); // 5 minutes
-  return result;
-}
-
-/**
- * Looks up a person's role from the "Team" sheet tab (Email | Role columns),
- * so the roster can be edited live without touching this file or redeploying.
- * The whole roster is cached for 60 seconds to avoid re-reading the sheet on
- * every sign-in check; new additions take effect within about a minute.
- */
-function getTeamRole_(email) {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get('team_roster');
-  let roster;
-  if (cached) {
-    roster = JSON.parse(cached);
-  } else {
-    roster = {};
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName(CONFIG.TEAM_SHEET_NAME);
-    if (sheet) {
-      const headers = getHeaders_(sheet);
-      const emailCol = headers.indexOf(CONFIG.TEAM_EMAIL_COLUMN);
-      const roleCol = headers.indexOf(CONFIG.TEAM_ROLE_COLUMN);
-      const lastRow = sheet.getLastRow();
-      if (emailCol !== -1 && roleCol !== -1 && lastRow > 1) {
-        const rows = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-        rows.forEach(row => {
-          const e = String(row[emailCol] || '').toLowerCase().trim();
-          const r = String(row[roleCol] || '').toLowerCase().trim();
-          if (e && r) roster[e] = r;
-        });
-      }
-    }
-    cache.put('team_roster', JSON.stringify(roster), 60); // 1 minute
-  }
-  return roster[email] || null;
-}
-
-function getSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sheet) throw new Error('Sheet "' + CONFIG.SHEET_NAME + '" not found.');
-  return sheet;
-}
-
-function getHeaders_(sheet) {
-  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-}
-
-function extractSitePrefix_(codeVal) {
-  const m = String(codeVal || '').match(/^[A-Za-z]+/);
-  return m ? m[0].toUpperCase() : '';
-}
-
-/** Sorts "Host Site 2" before "Host Site 10" instead of plain string order. */
-function naturalCompare_(a, b) {
-  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
-}
-
-function getUniqueColumnValues_(sheet, headers, columnName) {
-  const col = headers.indexOf(columnName);
-  if (col === -1) return [];
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  const values = sheet.getRange(2, col + 1, lastRow - 1, 1).getValues();
-  const set = {};
-  values.forEach(r => { const v = String(r[0] || '').trim(); if (v) set[v] = true; });
-  return Object.keys(set).sort(naturalCompare_);
-}
-
-/**
- * view (optional): when given, only the whitelisted fields for that role are
- * returned to the browser (see CONFIG.LOOKUP_FIELDS_BY_VIEW). Internal calls
- * (from updateItem_/updateFields_) omit view and get the full row, since that
- * data never leaves the server.
- *
- * Performance: searches only the barcode-match column first (one thin read), then
- * fetches just the single matching row, instead of reading the entire sheet
- * on every lookup. Much faster and more consistent as the sheet grows.
- */
-function lookupItem_(barcode, view) {
-  const sheet = getSheet_();
-  const headers = getHeaders_(sheet);
-  const barcodeCol = headers.indexOf(CONFIG.BARCODE_COLUMN);
-  if (barcodeCol === -1) throw new Error('Barcode column "' + CONFIG.BARCODE_COLUMN + '" not found.');
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { success: true, found: false };
-
-  const barcodeColumn = sheet.getRange(2, barcodeCol + 1, lastRow - 1, 1).getValues();
-  const target = String(barcode).trim().toUpperCase();
-
-  let matchIndex = -1;
-  for (let i = 0; i < barcodeColumn.length; i++) {
-    if (String(barcodeColumn[i][0]).trim().toUpperCase() === target) { matchIndex = i; break; }
-  }
-  if (matchIndex === -1) return { success: true, found: false };
-
-  const rowNumber = matchIndex + 2;
-  const rowValues = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const allowedFields = view ? CONFIG.LOOKUP_FIELDS_BY_VIEW[view] : null;
-
-  const row = {};
-  headers.forEach((h, idx) => {
-    if (!allowedFields || allowedFields.indexOf(h) !== -1) row[h] = rowValues[idx];
-  });
-  return { success: true, found: true, rowNumber: rowNumber, data: row };
-}
-
-function stampLogColumns_(sheet, headers, rowNumber, email) {
-  if (!CONFIG.LOG_UPDATED_AT) return;
-  const userCol = headers.indexOf(CONFIG.UPDATED_BY_COLUMN);
-  const timeCol = headers.indexOf(CONFIG.UPDATED_AT_COLUMN);
-  if (userCol !== -1) sheet.getRange(rowNumber, userCol + 1).setValue(email || 'Unknown');
-  if (timeCol !== -1) sheet.getRange(rowNumber, timeCol + 1).setValue(new Date());
-}
-
-function updateItem_(barcode, field, value, email) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-  } catch (e) {
-    return { success: false, error: 'System busy, please try again in a moment.' };
-  }
-  try {
-    const sheet = getSheet_();
-    const headers = getHeaders_(sheet);
-    const lookup = lookupItem_(barcode);
-    if (!lookup.found) return { success: false, error: 'Item not found for barcode: ' + barcode };
-
-    const fieldCol = headers.indexOf(field);
-    if (fieldCol === -1) return { success: false, error: 'Field "' + field + '" not found in sheet.' };
-
-    sheet.getRange(lookup.rowNumber, fieldCol + 1).setValue(value);
-    stampLogColumns_(sheet, headers, lookup.rowNumber, email);
-    return { success: true, message: 'Updated ' + field + ' to ' + value };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function updateFields_(barcode, fields, email) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-  } catch (e) {
-    return { success: false, error: 'System busy, please try again in a moment.' };
-  }
-  try {
-    const sheet = getSheet_();
-    const headers = getHeaders_(sheet);
-    const lookup = lookupItem_(barcode);
-    if (!lookup.found) return { success: false, error: 'Item not found for barcode: ' + barcode };
-
-    const skipped = [];
-    Object.keys(fields).forEach(fieldName => {
-      const col = headers.indexOf(fieldName);
-      if (col === -1) { skipped.push(fieldName); return; }
-      sheet.getRange(lookup.rowNumber, col + 1).setValue(fields[fieldName]);
-    });
-    stampLogColumns_(sheet, headers, lookup.rowNumber, email);
-
-    return {
-      success: true,
-      message: 'Updated ' + (Object.keys(fields).length - skipped.length) + ' field(s)',
-      skipped: skipped
-    };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function getSummary_(currentLocationFilter, siteFilter, dropoffFilter) {
-  const sheet = getSheet_();
-  const headers = getHeaders_(sheet);
-  const codeCol = headers.indexOf(CONFIG.CODE_COLUMN);
-  const locCol = headers.indexOf(CONFIG.LOCATION_COLUMN);
-  const recCol = headers.indexOf(CONFIG.REC_SITE_COLUMN);
-  if (locCol === -1) throw new Error('Location column not found.');
-  if (codeCol === -1) throw new Error('Code column not found.');
-  if (recCol === -1) throw new Error('Rec Site column not found.');
-
-  const lastRow = sheet.getLastRow();
-  const data = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues() : [];
-
-  const siteCounts = {};
-  const packingCounts = {};
-  let siteLocationTotal = 0;
-  let totalWishes = 0;
-  const codes = [];
-  const sitePrefixesSet = {};
-  const recSiteSet = {};
-
-  data.forEach(row => {
-    const codeVal = row[codeCol];
-    const prefix = extractSitePrefix_(codeVal);
-    if (prefix) sitePrefixesSet[prefix] = true;
-    const recVal = String(row[recCol] || '').trim();
-    if (recVal) recSiteSet[recVal] = true;
-  });
-
-  data.forEach(row => {
-    const codeVal = row[codeCol];
-    const prefix = extractSitePrefix_(codeVal);
-    if (siteFilter !== 'All' && prefix !== siteFilter) return;
-
-    const recVal = String(row[recCol] || '').trim();
-    if (dropoffFilter !== 'All' && recVal !== dropoffFilter) return;
-
-    const locVal = String(row[locCol] || '').trim();
-    if (currentLocationFilter !== 'All' && locVal !== currentLocationFilter) return;
-
-    totalWishes++;
-    codes.push(codeVal);
-
-    const isPackingLoc = CONFIG.PACKING_OPTIONS.indexOf(locVal) !== -1;
-
-    if (recVal) {
-      if (!siteCounts[recVal]) siteCounts[recVal] = { rec: 0, loc: 0 };
-      siteCounts[recVal].rec++;
-    }
-    if (locVal && isPackingLoc) {
-      packingCounts[locVal] = (packingCounts[locVal] || 0) + 1;
-    } else if (locVal) {
-      if (!siteCounts[locVal]) siteCounts[locVal] = { rec: 0, loc: 0 };
-      siteCounts[locVal].loc++;
-      siteLocationTotal++;
-    }
-  });
-
-  const packingTotal = Object.keys(packingCounts).reduce((s, k) => s + packingCounts[k], 0);
-  const allSitesLocationTotal = siteLocationTotal + packingTotal;
-
-  return {
-    success: true,
-    siteCounts: siteCounts,
-    packingCounts: packingCounts,
-    allSitesLocationTotal: allSitesLocationTotal,
-    totalWishes: totalWishes,
-    codes: codes,
-    sitePrefixes: Object.keys(sitePrefixesSet).sort(naturalCompare_),
-    recSiteOptions: Object.keys(recSiteSet).sort(naturalCompare_)
   };
-}
 
-/**
- * TEMPORARY - run this once manually (select it in the function dropdown
- * above, click Run) to trigger Apps Script's authorization prompt for
- * making external network calls. Delete this function afterward.
- */
-function testAuth() {
-  UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=test');
-}
+  function initApp() {
+    const allowed = ROLE_VIEWS[USER_ROLE] || ['packing'];
+    const viewSelect = document.getElementById('viewSelect');
+    Array.from(viewSelect.options).forEach(opt => { if (allowed.indexOf(opt.value) === -1) opt.remove(); });
+
+    currentView = getView();
+    if (allowed.indexOf(currentView) === -1) currentView = allowed[0];
+    viewSelect.value = currentView;
+    renderView();
+  }
+
+  function naturalCompare(a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function populateDropdown(id, options) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '';
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      sel.appendChild(o);
+    });
+  }
+
+  function locationOptionsForView(view) {
+    if (view === 'sitehost') return SERVER_CONFIG.recSiteOptions;
+    if (view === 'packing') return SERVER_CONFIG.packingOptions;
+    if (view === 'guiding') return [GUIDING_LOCATION];
+    return SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions);
+  }
+
+  function onViewChange() {
+    currentView = document.getElementById('viewSelect').value;
+    setView(currentView);
+    resetScanUI();
+    renderView();
+  }
+
+  function onLocationChange() {
+    if (currentView === 'workshop') {
+      setLocationFilter(document.getElementById('locationSelect').value);
+      loadSummary();
+    } else {
+      setLocation(currentView, document.getElementById('locationSelect').value);
+    }
+  }
+
+  function onSiteChange() {
+    setSiteFilter(document.getElementById('siteSelect').value);
+    loadSummary();
+  }
+
+  function onDropoffChange() {
+    setDropoffFilter(document.getElementById('dropoffSelect').value);
+    loadSummary();
+  }
+
+  function renderView() {
+    const isScanRole = (currentView === 'sitehost' || currentView === 'packing' || currentView === 'guiding');
+    const showLocation = isScanRole || currentView === 'workshop';
+    document.getElementById('locationBlock').style.display = showLocation ? 'block' : 'none';
+    document.getElementById('dropoffBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
+    document.getElementById('siteBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
+    document.getElementById('scanPanel').style.display = isScanRole ? 'block' : 'none';
+    document.getElementById('workshopPanel').style.display = (currentView === 'workshop') ? 'block' : 'none';
+    document.getElementById('historyBlock').style.display = isScanRole ? 'block' : 'none';
+
+    if (isScanRole) {
+      const options = locationOptionsForView(currentView);
+      populateDropdown('locationSelect', options);
+      const savedLoc = getLocation(currentView);
+      if (savedLoc && options.includes(savedLoc)) {
+        document.getElementById('locationSelect').value = savedLoc;
+      } else {
+        document.getElementById('locationSelect').value = options[0];
+        setLocation(currentView, options[0]);
+      }
+    } else if (currentView === 'workshop') {
+      const locOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      populateDropdown('locationSelect', locOptions);
+      document.getElementById('locationSelect').value = getLocationFilter();
+
+      const dropoffOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions);
+      populateDropdown('dropoffSelect', dropoffOptions);
+      document.getElementById('dropoffSelect').value = getDropoffFilter();
+
+      loadSummary(); // also refreshes Site + Dropoff + Current Location dropdowns from live data
+    }
+  }
+
+  function resetScanUI() {
+    pendingBarcode = null;
+    currentItemData = null;
+    document.getElementById('confirmBlock').style.display = 'none';
+    document.getElementById('followupBlock').style.display = 'none';
+    document.getElementById('resultBlock').style.display = 'none';
+    document.getElementById('historyList').innerHTML = '';
+    if (scanner) { try { scanner.stop(); } catch (e) {} scanner = null; }
+    document.getElementById('reader').style.display = 'none';
+    document.getElementById('startScan').style.display = 'block';
+    document.getElementById('toggleScan').style.display = 'none';
+  }
+
+  // ---------- camera ----------
+  function startScanner() {
+    document.getElementById('reader').style.display = 'block';
+    document.getElementById('startScan').style.display = 'none';
+    document.getElementById('toggleScan').style.display = 'block';
+    scanner = new Html5Qrcode('reader');
+    scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 120 } },
+      onScanSuccess, () => {}
+    ).catch(err => {
+      showStatus('Camera error: ' + err, false);
+      document.getElementById('reader').style.display = 'none';
+      document.getElementById('startScan').style.display = 'block';
+      document.getElementById('toggleScan').style.display = 'none';
+    });
+  }
+  document.getElementById('startScan').addEventListener('click', startScanner);
+  document.getElementById('toggleScan').addEventListener('click', () => {
+    scanningPaused = !scanningPaused;
+    document.getElementById('toggleScan').textContent = scanningPaused ? 'Resume' : 'Pause';
+  });
+
+  function onScanSuccess(decodedText) {
+    if (scanningPaused || pendingBarcode) return;
+    if (navigator.vibrate) { try { navigator.vibrate(100); } catch (e) {} }
+    beginScan(decodedText);
+  }
+  function handleManualLookup() {
+    const val = document.getElementById('manualBarcode').value.trim();
+    if (val) { document.getElementById('manualBarcode').value = ''; beginScan(val.toUpperCase()); }
+  }
+
+  // Routes into either the plain confirm box, or (Packing Day only) a
+  // colored confirm box that first looks up Complete + Packing Table.
+  function beginScan(code) {
+    pendingBarcode = code;
+    if (scanner) { try { scanner.pause(true); } catch (e) {} }
+
+    if (currentView === 'packing' && document.getElementById('locationSelect').value !== 'Packing Day (Truck)') {
+      document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+      document.getElementById('confirmCode').textContent = code + ' (checking...)';
+      document.getElementById('confirmBlock').style.display = 'block';
+      callApi('lookup', { barcode: code, view: 'packing' }).then(res => {
+        let color = FALLBACK_COLOR;
+        if (res.success && res.found) {
+          const complete = (res.data['Complete'] || '').toLowerCase();
+          const table = (res.data['Packing Table'] || '').toLowerCase();
+          if (complete !== 'complete') color = INCOMPLETE_COLOR;
+          else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
+        }
+        document.getElementById('confirmCode').style.background = color;
+        document.getElementById('confirmCode').textContent = code;
+      }).catch(() => {
+        document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+        document.getElementById('confirmCode').textContent = code;
+      });
+    } else {
+      document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+      document.getElementById('confirmCode').textContent = code;
+      document.getElementById('confirmBlock').style.display = 'block';
+    }
+  }
+
+  function declineScan() {
+    pendingBarcode = null;
+    document.getElementById('confirmBlock').style.display = 'none';
+    resumeCamera();
+  }
+  function resumeCamera() {
+    if (scanner) { try { scanner.resume(); } catch (e) {} }
+  }
+
+  function acceptScan() {
+    const code = pendingBarcode;
+    document.getElementById('confirmBlock').style.display = 'none';
+    if (currentView === 'packing') acceptForPacking(code);
+    else if (currentView === 'sitehost') acceptForSiteHost(code);
+    else if (currentView === 'guiding') acceptForGuiding(code);
+  }
+
+  // ---------- Packing Day Elf ----------
+  function acceptForPacking(code) {
+    const loc = document.getElementById('locationSelect').value;
+    callApi('update', { barcode: code, field: 'Location', value: loc, view: 'packing' })
+      .then(res => { addHistoryItem(code, res.success, res.success ? loc : res.error); pendingBarcode = null; resumeCamera(); })
+      .catch(err => { addHistoryItem(code, false, err.message); pendingBarcode = null; resumeCamera(); });
+  }
+
+  // ---------- Site Host Elf ----------
+  let sitehostState = { status: 'Empty', complete: 'Empty' };
+
+  function acceptForSiteHost(code) {
+    callApi('lookup', { barcode: code, view: 'sitehost' }).then(res => {
+      if (!res.success || !res.found) {
+        showStatus('Item not found: ' + code, false);
+        pendingBarcode = null; resumeCamera();
+        return;
+      }
+      sitehostState.status = res.data['Status'] || 'Empty';
+      sitehostState.complete = res.data['Complete'] || 'Empty';
+      renderSiteHostForm(code, res.data);
+    }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
+  }
+
+  function renderSiteHostForm(code, data) {
+    document.getElementById('followupHeader').textContent = 'Update Entry';
+    const body = document.getElementById('followupBody');
+
+    let html = '<div class="scanned-code">' + code + '</div>';
+    html += '<div class="field-label">Gift Status</div><div class="btn-group" id="statusGroup">';
+    SERVER_CONFIG.statusOptions.forEach(opt => {
+      html += '<button type="button" class="' + (opt === sitehostState.status ? 'selected' : '') + '" onclick="selectBtn(\'status\',\'' + opt + '\')">' + opt + '</button>';
+    });
+    html += '</div>';
+
+    html += '<div class="field-label">Site Host Notes</div><textarea class="field-input" id="notesInput">' + (data['Sitenotes'] || '') + '</textarea>';
+
+    html += '<div class="field-label">Gift Completeness</div><div class="btn-group" id="completeGroup">';
+    SERVER_CONFIG.completeOptions.forEach(opt => {
+      html += '<button type="button" class="' + (opt === sitehostState.complete ? 'selected' : '') + '" onclick="selectBtn(\'complete\',\'' + opt + '\')">' + opt + '</button>';
+    });
+    html += '</div>';
+
+    html += '<div class="field-label">Anything Missing</div><textarea class="field-input" id="missingInput">' + (data['Missing'] || '') + '</textarea>';
+    html += '<button class="btn-blue btn-block" style="margin-top:12px;" onclick="submitSiteHostUpdate(\'' + code + '\')">UPDATE</button>';
+
+    body.innerHTML = html;
+    document.getElementById('followupBlock').style.display = 'block';
+  }
+
+  function selectBtn(group, value) {
+    sitehostState[group] = value;
+    const groupEl = document.getElementById(group + 'Group');
+    Array.from(groupEl.children).forEach(btn => btn.classList.toggle('selected', btn.textContent === value));
+  }
+
+  function submitSiteHostUpdate(code) {
+    const loc = document.getElementById('locationSelect').value;
+    const fields = {
+      'Location': loc,
+      'Status': sitehostState.status,
+      'Sitenotes': document.getElementById('notesInput').value,
+      'Complete': sitehostState.complete,
+      'Missing': document.getElementById('missingInput').value
+    };
+    callApi('updateFields', { barcode: code, fields: JSON.stringify(fields) })
+      .then(res => {
+        addHistoryItem(code, res.success, res.success ? 'Updated' : res.error);
+        document.getElementById('followupBlock').style.display = 'none';
+        pendingBarcode = null;
+        resumeCamera();
+      })
+      .catch(err => {
+        addHistoryItem(code, false, err.message);
+        document.getElementById('followupBlock').style.display = 'none';
+        pendingBarcode = null;
+        resumeCamera();
+      });
+  }
+
+  // ---------- Guiding Spirit ----------
+  function acceptForGuiding(code) {
+    const loc = document.getElementById('locationSelect').value;
+    callApi('update', { barcode: code, field: 'Location', value: loc, view: 'guiding' }).catch(() => {});
+    callApi('lookup', { barcode: code, view: 'guiding' }).then(res => {
+      if (!res.success || !res.found) {
+        showStatus('Item not found: ' + code, false);
+        pendingBarcode = null; resumeCamera();
+        return;
+      }
+      currentItemData = res.data;
+      renderGuidingDetails(code, res.data);
+    }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
+  }
+
+  function renderGuidingDetails(code, data) {
+    document.getElementById('followupHeader').textContent = 'Entry Details';
+    const body = document.getElementById('followupBody');
+
+    let html = '<div class="scanned-code">' + code + '</div>';
+    html += '<div class="detail-line"><b>Missing:</b> ' + (data['Missing'] || '—') + '</div><hr>';
+    SERVER_CONFIG.detailFields.forEach(f => {
+      const val = data[f];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        html += '<div class="detail-line"><b>' + f + ':</b> ' + val + '</div>';
+      }
+    });
+    html += '<div class="confirm-btns" style="margin-top:12px;">';
+    html += '<button class="btn-blue" style="flex:1;" onclick="submitGiftComplete(\'' + code + '\')">GIFT COMPLETE</button>';
+    html += '<button class="btn-gray" style="flex:1;" onclick="skipFollowup()">Skip</button>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    document.getElementById('followupBlock').style.display = 'block';
+  }
+
+  function submitGiftComplete(code) {
+    callApi('update', { barcode: code, field: 'Complete', value: 'Complete', view: 'guiding' })
+      .then(res => {
+        addHistoryItem(code, res.success, res.success ? 'Gift Complete' : res.error);
+        document.getElementById('followupBlock').style.display = 'none';
+        if (res.success) {
+          showPackingResult(code);
+        } else {
+          currentItemData = null;
+          pendingBarcode = null;
+          resumeCamera();
+        }
+      })
+      .catch(err => {
+        addHistoryItem(code, false, err.message);
+        document.getElementById('followupBlock').style.display = 'none';
+        currentItemData = null;
+        pendingBarcode = null;
+        resumeCamera();
+      });
+  }
+
+  function showPackingResult(code) {
+    const table = (currentItemData && currentItemData['Packing Table'] || '').toLowerCase();
+    const color = PACKING_COLORS[table] || FALLBACK_COLOR;
+    document.getElementById('resultCode').style.background = color;
+    document.getElementById('resultCode').textContent = code + (currentItemData && currentItemData['Packing Table'] ? ' — ' + currentItemData['Packing Table'] : '');
+    document.getElementById('resultBlock').style.display = 'block';
+  }
+
+  function continueAfterResult() {
+    document.getElementById('resultBlock').style.display = 'none';
+    currentItemData = null;
+    pendingBarcode = null;
+    resumeCamera();
+  }
+
+  function skipFollowup() {
+    document.getElementById('followupBlock').style.display = 'none';
+    currentItemData = null;
+    pendingBarcode = null;
+    resumeCamera();
+  }
+
+  // ---------- shared history log ----------
+  function addHistoryItem(code, ok, message) {
+    const list = document.getElementById('historyList');
+    const item = document.createElement('div');
+    item.className = 'history-item ' + (ok ? 'history-ok' : 'history-err');
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    item.innerHTML = '<span class="hcode">' + code + '</span><span>' + (ok ? '✅ ' + message : '❌ ' + message) + '</span><span class="htime">' + time + '</span>';
+    list.insertBefore(item, list.firstChild);
+    showStatus(ok ? 'Saved: ' + code : 'Failed: ' + code, ok);
+  }
+
+  // ---------- Santa's Workshop ----------
+  function loadSummary() {
+    const loc = getLocationFilter();
+    const site = getSiteFilter();
+    const dropoff = getDropoffFilter();
+    document.getElementById('summaryList').textContent = 'Loading...';
+    document.getElementById('wishListBox').textContent = 'Loading...';
+    callApi('summary', { location: loc, site: site, dropoff: dropoff }).then(res => {
+      if (!res.success) { document.getElementById('summaryList').textContent = res.error; return; }
+
+      // Refresh all three filter dropdowns from live data, keeping the current selection if still valid
+      const siteOptions = ['All'].concat(res.sitePrefixes);
+      populateDropdown('siteSelect', siteOptions);
+      document.getElementById('siteSelect').value = siteOptions.includes(site) ? site : 'All';
+
+      const dropoffOptions = ['All'].concat(res.recSiteOptions);
+      populateDropdown('dropoffSelect', dropoffOptions);
+      document.getElementById('dropoffSelect').value = dropoffOptions.includes(dropoff) ? dropoff : 'All';
+
+      const locOptions = ['All'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      populateDropdown('locationSelect', locOptions);
+      document.getElementById('locationSelect').value = locOptions.includes(loc) ? loc : 'All';
+
+      renderSummary(res);
+      renderWishList(res.codes);
+    }).catch(err => { document.getElementById('summaryList').textContent = 'Error: ' + err.message; });
+  }
+
+  function renderSummary(res) {
+    let html = '<div><b>Locations:</b></div>';
+    const siteNames = Object.keys(res.siteCounts).sort(naturalCompare);
+    if (siteNames.length) {
+      siteNames.forEach(name => {
+        const c = res.siteCounts[name];
+        if (c.rec === 0 && c.loc === 0) return;
+        html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
+      });
+    } else {
+      html += '<div style="color:#666;">No site activity for this selection.</div>';
+    }
+
+    SERVER_CONFIG.packingOptions.forEach(name => {
+      const c = res.packingCounts[name] || 0;
+      if (c === 0) return;
+      html += '<div><b>' + name + '</b> = ' + c + '</div>';
+    });
+    html += '<div class="total-green">All Sites = ' + res.allSitesLocationTotal + '</div>';
+    html += '<div class="total-red">Wishes = ' + res.totalWishes + '</div>';
+    document.getElementById('summaryList').innerHTML = html;
+  }
+
+  function renderWishList(codes) {
+    if (!codes.length) { document.getElementById('wishListBox').textContent = 'No matching entries.'; return; }
+    document.getElementById('wishListBox').innerHTML = codes.map(c => '<div>' + c + '</div>').join('');
+  }
+
+  // Gate display is triggered by the Google script's onload -> initGoogleSignIn()
+</script>
+</body>
+</html>
