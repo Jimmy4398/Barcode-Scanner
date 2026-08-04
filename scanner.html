@@ -731,7 +731,7 @@
       anyShown = true;
       if (name === curLoc) {
         // Current Location pinned to this exact site: only the actual count matters.
-        html += '<div><b>' + name + '</b> = ' + c.loc + ', ' + c.loc + '</div>';
+        html += '<div><b>' + name + '</b> = ' + c.loc + '</div>';
       } else {
         html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
       }
