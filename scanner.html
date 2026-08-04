@@ -399,7 +399,7 @@
         setLocation(currentView, options[0]);
       }
     } else if (currentView === 'workshop') {
-      const locOptions = ['All', 'None'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      const locOptions = ['All', 'Blank'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = getLocationFilter();
 
@@ -703,7 +703,7 @@
       populateDropdown('dropoffSelect', dropoffOptions);
       document.getElementById('dropoffSelect').value = dropoffOptions.includes(dropoff) ? dropoff : 'All';
 
-      const locOptions = ['All', 'None'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      const locOptions = ['All', 'Blank'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = locOptions.includes(loc) ? loc : 'All';
 
@@ -713,13 +713,14 @@
   }
 
   function renderSummary(res) {
+    const isBlankFilter = (getLocationFilter() === 'Blank');
     let html = '<div><b>Locations:</b></div>';
     const siteNames = Object.keys(res.siteCounts).sort(naturalCompare);
     if (siteNames.length) {
       siteNames.forEach(name => {
         const c = res.siteCounts[name];
         if (c.rec === 0 && c.loc === 0) return;
-        html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
+        html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
       });
     } else {
       html += '<div style="color:#666;">No site activity for this selection.</div>';
