@@ -467,6 +467,7 @@
       document.getElementById('confirmCode').textContent = code + ' (checking...)';
       document.getElementById('confirmBlock').style.display = 'block';
       callApi('lookup', { barcode: code, view: 'packing' }).then(res => {
+        let color = FALLBACK_COLOR;
         if (res.success && res.found) {
           const complete = (res.data['Complete'] || '').toLowerCase();
           const table = (res.data['Packing Table'] || '').toLowerCase();
@@ -516,6 +517,12 @@
 
   function acceptForSiteHost(code) {
     callApi('lookup', { barcode: code, view: 'sitehost' }).then(res => {
+      if (!res.success || !res.found) {
+        showStatus('Item not found: ' + code, false);
+        pendingBarcode = null; resumeCamera();
+        return;
+      }
+      sitehostState.status = res.data['Status'] || 'Empty';
       sitehostState.complete = res.data['Complete'] || 'Empty';
       renderSiteHostForm(code, res.data);
     }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
@@ -582,6 +589,12 @@
     const loc = document.getElementById('locationSelect').value;
     callApi('update', { barcode: code, field: 'Location', value: loc, view: 'guiding' }).catch(() => {});
     callApi('lookup', { barcode: code, view: 'guiding' }).then(res => {
+      if (!res.success || !res.found) {
+        showStatus('Item not found: ' + code, false);
+        pendingBarcode = null; resumeCamera();
+        return;
+      }
+      currentItemData = res.data;
       renderGuidingDetails(code, res.data);
     }).catch(err => { showStatus('Error: ' + err.message, false); pendingBarcode = null; resumeCamera(); });
   }
@@ -633,7 +646,7 @@
     const table = (currentItemData && currentItemData['Packing Table'] || '').toLowerCase();
     const color = PACKING_COLORS[table] || FALLBACK_COLOR;
     document.getElementById('resultCode').style.background = color;
-    document.getElementById('resultCode').textContent = code + (currentItemData['Packing Table'] ? ' — ' + currentItemData['Packing Table'] : '');
+    document.getElementById('resultCode').textContent = code + (currentItemData && currentItemData['Packing Table'] ? ' — ' + currentItemData['Packing Table'] : '');
     document.getElementById('resultBlock').style.display = 'block';
   }
 
