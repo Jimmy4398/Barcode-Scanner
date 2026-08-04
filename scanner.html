@@ -109,9 +109,16 @@
     </div>
 
     <div class="block" id="locationBlock">
-      <div class="block-header">Location:</div>
+      <div class="block-header">Current Location:</div>
       <div class="block-body" style="padding:0;">
         <select id="locationSelect" class="dd" onchange="onLocationChange()"></select>
+      </div>
+    </div>
+
+    <div class="block" id="dropoffBlock" style="display:none;">
+      <div class="block-header">Dropoff Location:</div>
+      <div class="block-body" style="padding:0;">
+        <select id="dropoffSelect" class="dd" onchange="onDropoffChange()"></select>
       </div>
     </div>
 
@@ -209,6 +216,8 @@
   function setLocationFilter(val) { localStorage.setItem('op_elf_locfilter_workshop', val); }
   function getSiteFilter() { return localStorage.getItem('op_elf_site_workshop') || 'All'; }
   function setSiteFilter(val) { localStorage.setItem('op_elf_site_workshop', val); }
+  function getDropoffFilter() { return localStorage.getItem('op_elf_dropoff_workshop') || 'All'; }
+  function setDropoffFilter(val) { localStorage.setItem('op_elf_dropoff_workshop', val); }
 
   function showStatus(msg, ok, elId) {
     const el = document.getElementById(elId || 'status');
@@ -274,10 +283,10 @@
   }
 
   function locationOptionsForView(view) {
-    if (view === 'sitehost') return SERVER_CONFIG.hostSiteOptions;
+    if (view === 'sitehost') return SERVER_CONFIG.recSiteOptions;
     if (view === 'packing') return SERVER_CONFIG.packingOptions;
     if (view === 'guiding') return [GUIDING_LOCATION];
-    return SERVER_CONFIG.locationOptions;
+    return SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions);
   }
 
   function onViewChange() {
@@ -301,10 +310,16 @@
     loadSummary();
   }
 
+  function onDropoffChange() {
+    setDropoffFilter(document.getElementById('dropoffSelect').value);
+    loadSummary();
+  }
+
   function renderView() {
     const isScanRole = (currentView === 'sitehost' || currentView === 'packing' || currentView === 'guiding');
     const showLocation = isScanRole || currentView === 'workshop';
     document.getElementById('locationBlock').style.display = showLocation ? 'block' : 'none';
+    document.getElementById('dropoffBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
     document.getElementById('siteBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
     document.getElementById('scanPanel').style.display = isScanRole ? 'block' : 'none';
     document.getElementById('workshopPanel').style.display = (currentView === 'workshop') ? 'block' : 'none';
@@ -321,10 +336,15 @@
         setLocation(currentView, options[0]);
       }
     } else if (currentView === 'workshop') {
-      const options = ['All'].concat(SERVER_CONFIG.hostSiteOptions).concat(['Packing Day Locations']);
-      populateDropdown('locationSelect', options);
+      const locOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions).concat(SERVER_CONFIG.packingOptions);
+      populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = getLocationFilter();
-      loadSummary(); // also (re)populates the Site dropdown from live data
+
+      const dropoffOptions = ['All'].concat(SERVER_CONFIG.recSiteOptions);
+      populateDropdown('dropoffSelect', dropoffOptions);
+      document.getElementById('dropoffSelect').value = getDropoffFilter();
+
+      loadSummary(); // also refreshes Site + Dropoff + Current Location dropdowns from live data
     }
   }
 
@@ -596,15 +616,24 @@
   function loadSummary() {
     const loc = getLocationFilter();
     const site = getSiteFilter();
+    const dropoff = getDropoffFilter();
     document.getElementById('summaryList').textContent = 'Loading...';
     document.getElementById('wishListBox').textContent = 'Loading...';
-    callApi('summary', { location: loc, site: site }).then(res => {
+    callApi('summary', { location: loc, site: site, dropoff: dropoff }).then(res => {
       if (!res.success) { document.getElementById('summaryList').textContent = res.error; return; }
 
-      // (Re)populate Site dropdown from live data, then Location dropdown from server config
+      // Refresh all three filter dropdowns from live data, keeping the current selection if still valid
       const siteOptions = ['All'].concat(res.sitePrefixes);
       populateDropdown('siteSelect', siteOptions);
       document.getElementById('siteSelect').value = siteOptions.includes(site) ? site : 'All';
+
+      const dropoffOptions = ['All'].concat(res.recSiteOptions);
+      populateDropdown('dropoffSelect', dropoffOptions);
+      document.getElementById('dropoffSelect').value = dropoffOptions.includes(dropoff) ? dropoff : 'All';
+
+      const locOptions = ['All'].concat(res.recSiteOptions).concat(SERVER_CONFIG.packingOptions);
+      populateDropdown('locationSelect', locOptions);
+      document.getElementById('locationSelect').value = locOptions.includes(loc) ? loc : 'All';
 
       renderSummary(res);
       renderWishList(res.codes);
@@ -612,24 +641,20 @@
   }
 
   function renderSummary(res) {
-    const locFilter = getLocationFilter();
-    const showHostSites = (locFilter !== 'Packing Day Locations');
     let html = '<div><b>Locations:</b></div>';
-
-    if (showHostSites) {
-      let anyHostSite = false;
-      for (let i = 1; i <= 32; i++) {
-        const name = 'Host Site ' + i;
-        const c = res.hostSiteCounts[name] || { rec: 0, loc: 0 };
-        if (c.rec === 0 && c.loc === 0) continue;
-        anyHostSite = true;
+    const siteNames = Object.keys(res.siteCounts).sort();
+    if (siteNames.length) {
+      siteNames.forEach(name => {
+        const c = res.siteCounts[name];
+        if (c.rec === 0 && c.loc === 0) return;
         html += '<div><b>' + name + '</b> = ' + c.rec + ', ' + c.loc + '</div>';
-      }
-      if (!anyHostSite) html += '<div style="color:#666;">No host site activity for this selection.</div>';
+      });
+    } else {
+      html += '<div style="color:#666;">No site activity for this selection.</div>';
     }
 
     SERVER_CONFIG.packingOptions.forEach(name => {
-      const c = res.otherCounts[name] || 0;
+      const c = res.packingCounts[name] || 0;
       if (c === 0) return;
       html += '<div><b>' + name + '</b> = ' + c + '</div>';
     });
