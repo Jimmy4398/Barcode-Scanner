@@ -714,15 +714,23 @@
 
   function renderSummary(res) {
     const isBlankFilter = (getLocationFilter() === 'Blank');
+    const dropoff = getDropoffFilter();
+    const curLoc = getLocationFilter();
+    // Once Current Location is pinned to one specific site, the Dropoff
+    // site's own line is just restating the filter you already chose.
+    const suppressDropoffLine = (dropoff !== 'All' && curLoc !== 'All' && curLoc !== 'Blank' && curLoc !== dropoff);
+
     let html = '<div><b>Locations:</b></div>';
     const siteNames = Object.keys(res.siteCounts).sort(naturalCompare);
-    if (siteNames.length) {
-      siteNames.forEach(name => {
-        const c = res.siteCounts[name];
-        if (c.rec === 0 && c.loc === 0) return;
-        html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
-      });
-    } else {
+    let anyShown = false;
+    siteNames.forEach(name => {
+      if (suppressDropoffLine && name === dropoff) return;
+      const c = res.siteCounts[name];
+      if (c.rec === 0 && c.loc === 0) return;
+      anyShown = true;
+      html += '<div><b>' + name + '</b> = ' + c.rec + (isBlankFilter ? '' : ', ' + c.loc) + '</div>';
+    });
+    if (!anyShown) {
       html += '<div style="color:#666;">No site activity for this selection.</div>';
     }
 
