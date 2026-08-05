@@ -144,6 +144,16 @@
     </div>
 
     <div id="scanPanel" style="display:none;">
+      <div id="seasonBanner" style="display:none;">
+        <div class="block">
+          <div class="block-body" style="text-align:center;padding:24px 16px;">
+            <div style="font-size:32px;margin-bottom:10px;">🎄</div>
+            <div style="font-size:15px;font-weight:600;line-height:1.5;color:#111827;">Our elves are hard at work filling wishes for children in need. These views will be available once Packing Day is upon us. Thank you for your incredible support!</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="scanContent">
       <div class="block">
         <div class="block-header">SCAN BARCODE</div>
         <div class="block-body">
@@ -195,6 +205,7 @@
           <div style="font-size:12px;color:#666;margin-bottom:6px;">Recent scans</div>
           <div id="historyList"></div>
         </div>
+      </div>
       </div>
     </div>
 
@@ -364,7 +375,7 @@
   const ROLE_VIEWS = {
     admin: ['sitehost', 'packing', 'guiding', 'workshop'],
     sitehost: ['sitehost', 'packing', 'guiding'],
-    volunteer: ['packing', 'guiding'],
+    volunteer: ['packing'],
   };
 
   function initApp() {
@@ -462,15 +473,21 @@
 
   function renderView() {
     const isScanRole = (currentView === 'sitehost' || currentView === 'packing' || currentView === 'guiding');
-    const showLocation = isScanRole || currentView === 'workshop';
+    const isSeasonGated = (currentView === 'packing' || currentView === 'guiding') && !!(SERVER_CONFIG && SERVER_CONFIG.seasonOff);
+    const showLocation = (isScanRole && !isSeasonGated) || currentView === 'workshop';
     document.getElementById('locationBlock').style.display = showLocation ? 'block' : 'none';
     document.getElementById('dropoffBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
     document.getElementById('siteBlock').style.display = (currentView === 'workshop') ? 'block' : 'none';
     document.getElementById('scanPanel').style.display = isScanRole ? 'block' : 'none';
     document.getElementById('workshopPanel').style.display = (currentView === 'workshop') ? 'block' : 'none';
-    document.getElementById('historyBlock').style.display = isScanRole ? 'block' : 'none';
+    document.getElementById('historyBlock').style.display = (isScanRole && !isSeasonGated) ? 'block' : 'none';
 
     if (isScanRole) {
+      document.getElementById('seasonBanner').style.display = isSeasonGated ? 'block' : 'none';
+      document.getElementById('scanContent').style.display = isSeasonGated ? 'none' : 'block';
+    }
+
+    if (isScanRole && !isSeasonGated) {
       const options = locationOptionsForView(currentView);
       populateDropdown('locationSelect', options);
       const savedLoc = getLocation(currentView);
