@@ -19,7 +19,7 @@
   .block-body.no-header { border-radius: 10px; }
 
   select.dd {
-    width: 100%; background: #FFEB3B; border: none; font-size: 15px; font-weight: 600;
+    width: 100%; background: #FFF9C4; border: none; font-size: 15px; font-weight: 600;
     color: #111827; padding: 10px 8px; appearance: none; -webkit-appearance: none;
   }
 
@@ -32,6 +32,7 @@
   .btn-gray { background: #808080; color: white; }
   .btn-blue { background: #1e88e5; color: white; }
   .btn-accept { background: #16a34a; color: white; flex: 1; }
+  .btn-accept:disabled { background: #9CA3AF; color: #E5E7EB; cursor: not-allowed; opacity: 0.8; }
   .btn-decline { background: #dc2626; color: white; flex: 1; }
   .confirm-btns { display: flex; gap: 8px; margin-top: 8px; }
 
@@ -141,7 +142,7 @@
             <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Scanned:</div>
             <div class="scanned-code" id="confirmCode"></div>
             <div class="confirm-btns">
-              <button class="btn-accept" onclick="acceptScan()">✅ Accept</button>
+              <button class="btn-accept" id="acceptBtn" onclick="acceptScan()">✅ Accept</button>
               <button class="btn-decline" onclick="declineScan()">❌ Decline</button>
             </div>
           </div>
@@ -363,7 +364,7 @@
     'Packing Day (Check-in)': { bg: '#FFEB3B', color: '#111827' },
     'Packing Day (Spirit)': { bg: '#DC2626', color: '#FFFFFF' },
     'Packing Day (Packing)': { bg: '#111827', color: '#FFFFFF' },
-    'Packing Day (Yellow Table)': { bg: '#FFF9C4', color: '#111827' },
+    'Packing Day (Yellow Table)': { bg: '#FFEB3B', color: '#111827' },
     'Packing Day (Blue Table)': { bg: '#60A5FA', color: '#111827' },
     'Packing Day (Pink Table)': { bg: '#F472B6', color: '#111827' },
     'Packing Day (Green Table)': { bg: '#4ADE80', color: '#111827' },
@@ -447,6 +448,7 @@
     document.getElementById('reader').style.display = 'none';
     document.getElementById('startScan').style.display = 'block';
     document.getElementById('toggleScan').style.display = 'none';
+    setAcceptEnabled(true);
   }
 
   // ---------- camera ----------
@@ -490,6 +492,19 @@
     el.style.color = (bgColor === INCOMPLETE_COLOR) ? '#FFFFFF' : '#111827';
   }
 
+  // Maps a Current Location table stop to the table color it should match.
+  // Only these 4 are checked, per design — Spirit/Packing/Truck/Check-in are exempt.
+  const LOCATION_TABLE_MAP = {
+    'Packing Day (Yellow Table)': 'yellow',
+    'Packing Day (Blue Table)': 'blue',
+    'Packing Day (Pink Table)': 'pink',
+    'Packing Day (Green Table)': 'green',
+  };
+
+  function setAcceptEnabled(enabled) {
+    document.getElementById('acceptBtn').disabled = !enabled;
+  }
+
   function beginScan(code) {
     pendingBarcode = code;
     if (scanner) { try { scanner.pause(true); } catch (e) {} }
@@ -498,30 +513,39 @@
       setColoredBox('confirmCode', FALLBACK_COLOR);
       document.getElementById('confirmCode').textContent = code + ' (checking...)';
       document.getElementById('confirmBlock').style.display = 'block';
+      setAcceptEnabled(false);
       callApi('lookup', { barcode: code, view: 'packing' }).then(res => {
         let color = FALLBACK_COLOR;
+        let mismatch = false;
         if (res.success && res.found) {
           const complete = (res.data['Complete'] || '').toLowerCase();
           const table = (res.data['Packing Table'] || '').toLowerCase();
           if (complete !== 'complete') color = INCOMPLETE_COLOR;
           else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
+
+          const expectedColor = LOCATION_TABLE_MAP[document.getElementById('locationSelect').value];
+          if (expectedColor && table && table !== expectedColor) mismatch = true;
         }
         setColoredBox('confirmCode', color);
         document.getElementById('confirmCode').textContent = code;
+        setAcceptEnabled(!mismatch);
       }).catch(() => {
         setColoredBox('confirmCode', FALLBACK_COLOR);
         document.getElementById('confirmCode').textContent = code;
+        setAcceptEnabled(true);
       });
     } else {
       setColoredBox('confirmCode', FALLBACK_COLOR);
       document.getElementById('confirmCode').textContent = code;
       document.getElementById('confirmBlock').style.display = 'block';
+      setAcceptEnabled(true);
     }
   }
 
   function declineScan() {
     pendingBarcode = null;
     document.getElementById('confirmBlock').style.display = 'none';
+    setAcceptEnabled(true);
     resumeCamera();
   }
   function resumeCamera() {
