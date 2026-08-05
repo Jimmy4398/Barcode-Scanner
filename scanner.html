@@ -149,6 +149,7 @@
           <div class="block-body" style="text-align:center;padding:24px 16px;">
             <div style="font-size:32px;margin-bottom:10px;">🎄</div>
             <div style="font-size:15px;font-weight:600;line-height:1.5;color:#111827;">Our elves are hard at work filling wishes for children in need. These views will be available once Packing Day is upon us. Thank you for your incredible support!</div>
+            <button class="btn-gray" id="checkSeasonBtn" style="margin-top:16px;" onclick="checkSeasonAgain()">🔄 Check Again</button>
           </div>
         </div>
       </div>
@@ -529,6 +530,48 @@
   }
 
   // ---------- camera ----------
+  function refreshSeasonGate(onNotGated) {
+    return callApi('config', {}).then(res => {
+      if (!res.success) { if (onNotGated) onNotGated(); return; }
+      SERVER_CONFIG = res;
+      const nowGated = (currentView === 'packing' || currentView === 'guiding') && !!res.seasonOff;
+      if (nowGated) {
+        document.getElementById('seasonBanner').style.display = 'block';
+        document.getElementById('scanContent').style.display = 'none';
+        document.getElementById('locationBlock').style.display = 'none';
+        document.getElementById('historyBlock').style.display = 'none';
+      } else {
+        document.getElementById('seasonBanner').style.display = 'none';
+        document.getElementById('scanContent').style.display = 'block';
+        document.getElementById('historyBlock').style.display = 'block';
+        const options = locationOptionsForView(currentView);
+        populateDropdown('locationSelect', options);
+        const savedLoc = getLocation(currentView);
+        document.getElementById('locationSelect').value = (savedLoc && options.includes(savedLoc)) ? savedLoc : options[0];
+        document.getElementById('locationBlock').style.display = 'block';
+        applyPackingSelectColor();
+        if (onNotGated) onNotGated();
+      }
+    }).catch(() => { if (onNotGated) onNotGated(); }); // fail open on network hiccups
+  }
+
+  function handleStartScanClick() {
+    document.getElementById('startScan').disabled = true;
+    refreshSeasonGate(startScanner).then(() => {
+      document.getElementById('startScan').disabled = false;
+    });
+  }
+
+  function checkSeasonAgain() {
+    const btn = document.getElementById('checkSeasonBtn');
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    refreshSeasonGate().then(() => {
+      btn.disabled = false;
+      btn.textContent = '🔄 Check Again';
+    });
+  }
+
   function startScanner() {
     document.getElementById('reader').style.display = 'block';
     document.getElementById('startScan').style.display = 'none';
@@ -545,7 +588,7 @@
       document.getElementById('toggleScan').style.display = 'none';
     });
   }
-  document.getElementById('startScan').addEventListener('click', startScanner);
+  document.getElementById('startScan').addEventListener('click', handleStartScanClick);
   document.getElementById('toggleScan').addEventListener('click', () => {
     scanningPaused = !scanningPaused;
     document.getElementById('toggleScan').textContent = scanningPaused ? 'Resume' : 'Pause';
