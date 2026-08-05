@@ -43,7 +43,7 @@
   .status-ok { background: #dcfce7; color: #166534; display: block !important; }
   .status-err { background: #fee2e2; color: #991b1b; display: block !important; }
 
-  #confirmBlock, #followupBlock, #resultBlock { display: none; }
+  #confirmBlock, #followupBlock, #resultBlock, #notFoundBlock { display: none; }
   .scanned-code { font-size: 22px; font-weight: 800; text-align: center; margin: 6px 0 8px; word-break: break-all; background: #D1D5DB; padding: 8px; border-radius: 6px; }
 
   .btn-group { display: flex; gap: 6px; margin: 6px 0 12px; }
@@ -60,6 +60,7 @@
   .history-ok { background: #dcfce7; }
   .history-err { background: #fee2e2; }
   .history-declined { background: #e5e7eb; }
+  .history-notfound { background: #FFEDD5; }
   .history-item .hcode { font-weight: 700; }
   .history-item .htime { font-size: 11px; color: #555; }
 
@@ -165,6 +166,13 @@
             <button class="btn-primary btn-block" onclick="continueAfterResult()">Continue</button>
           </div>
 
+          <div id="notFoundBlock">
+            <div style="font-size:12px;color:#666;text-align:center;margin-top:10px;">Scanned:</div>
+            <div class="scanned-code" id="notFoundCode" style="background:#EA580C;color:#FFFFFF;"></div>
+            <div style="text-align:center;font-weight:700;color:#EA580C;margin-bottom:10px;">⚠️ Item Not Found — check the barcode and rescan</div>
+            <button class="btn-primary btn-block" onclick="continueAfterNotFound()">Continue</button>
+          </div>
+
           <div id="processingIndicator" style="display:none;flex-direction:column;align-items:center;gap:8px;margin:14px 0;">
             <div class="spinner"></div>
             <div id="processingText" style="font-size:13px;color:#555;">Working…</div>
@@ -217,6 +225,7 @@
   const PACKING_COLORS = { yellow: '#FFEB3B', blue: '#60A5FA', pink: '#F472B6', green: '#4ADE80' };
   const INCOMPLETE_COLOR = '#B91C1C';
   const FALLBACK_COLOR = '#D1D5DB';
+  const NOT_FOUND_COLOR = '#EA580C';
   const GUIDING_LOCATION = 'Packing Day (Spirit)';
 
   let SERVER_CONFIG = null;
@@ -492,6 +501,7 @@
     document.getElementById('confirmBlock').style.display = 'none';
     document.getElementById('followupBlock').style.display = 'none';
     document.getElementById('resultBlock').style.display = 'none';
+    document.getElementById('notFoundBlock').style.display = 'none';
     document.getElementById('processingIndicator').style.display = 'none';
     document.getElementById('historyList').innerHTML = '';
     if (scanner) { try { scanner.stop(); } catch (e) {} scanner = null; }
@@ -539,7 +549,7 @@
   function setColoredBox(elId, bgColor) {
     const el = document.getElementById(elId);
     el.style.background = bgColor;
-    el.style.color = (bgColor === INCOMPLETE_COLOR) ? '#FFFFFF' : '#111827';
+    el.style.color = (bgColor === INCOMPLETE_COLOR || bgColor === NOT_FOUND_COLOR) ? '#FFFFFF' : '#111827';
   }
 
   // Maps a Current Location table stop to the table color it should match.
@@ -566,18 +576,24 @@
       document.getElementById('confirmBlock').style.display = 'block';
       setAcceptEnabled(false);
       callApi('lookup', { barcode: code, view: 'packing' }).then(res => {
+        if (!res.success || !res.found) {
+          setColoredBox('confirmCode', NOT_FOUND_COLOR);
+          document.getElementById('confirmCode').textContent = 'NOT FOUND: ' + code;
+          setAcceptEnabled(false);
+          addNotFoundItem(code);
+          return;
+        }
         let color = FALLBACK_COLOR;
         let mismatch = false;
-        if (res.success && res.found) {
-          const complete = (res.data['Complete'] || '').toLowerCase();
-          const table = (res.data['Packing Table'] || '').toLowerCase();
-          if (complete !== 'complete') color = INCOMPLETE_COLOR;
-          else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
+        const complete = (res.data['Complete'] || '').toLowerCase();
+        const table = (res.data['Packing Table'] || '').toLowerCase();
+        if (complete !== 'complete') color = INCOMPLETE_COLOR;
+        else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
 
-          pendingItemTable = table || null;
-          const expectedColor = LOCATION_TABLE_MAP[document.getElementById('locationSelect').value];
-          if (expectedColor && table && table !== expectedColor) mismatch = true;
-        }
+        pendingItemTable = table || null;
+        const expectedColor = LOCATION_TABLE_MAP[document.getElementById('locationSelect').value];
+        if (expectedColor && table && table !== expectedColor) mismatch = true;
+
         setColoredBox('confirmCode', color);
         document.getElementById('confirmCode').textContent = code;
         setAcceptEnabled(!mismatch);
@@ -630,8 +646,7 @@
     callApi('lookup', { barcode: code, view: 'sitehost' }).then(res => {
       hideProcessing();
       if (!res.success || !res.found) {
-        showStatus('Item not found: ' + code, false);
-        pendingBarcode = null; resumeCamera();
+        showNotFound(code);
         return;
       }
       sitehostState.status = res.data['Status'] || 'Empty';
@@ -723,8 +738,7 @@
     callApi('lookup', { barcode: code, view: 'guiding' }).then(res => {
       hideProcessing();
       if (!res.success || !res.found) {
-        showStatus('Item not found: ' + code, false);
-        pendingBarcode = null; resumeCamera();
+        showNotFound(code);
         return;
       }
       currentItemData = res.data;
@@ -792,6 +806,19 @@
     resumeCamera();
   }
 
+  function showNotFound(code) {
+    document.getElementById('notFoundCode').textContent = code;
+    document.getElementById('notFoundBlock').style.display = 'block';
+    addNotFoundItem(code);
+  }
+
+  function continueAfterNotFound() {
+    document.getElementById('notFoundBlock').style.display = 'none';
+    currentItemData = null;
+    pendingBarcode = null;
+    resumeCamera();
+  }
+
   function skipFollowup() {
     document.getElementById('followupBlock').style.display = 'none';
     currentItemData = null;
@@ -815,6 +842,15 @@
     item.className = 'history-item history-declined';
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     item.innerHTML = '<span class="hcode">' + code + '</span><span>\u26a0\ufe0f Update Declined</span><span class="htime">' + time + '</span>';
+    list.insertBefore(item, list.firstChild);
+  }
+
+  function addNotFoundItem(code) {
+    const list = document.getElementById('historyList');
+    const item = document.createElement('div');
+    item.className = 'history-item history-notfound';
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    item.innerHTML = '<span class="hcode">' + code + '</span><span>\ud83d\udeab Not Found</span><span class="htime">' + time + '</span>';
     list.insertBefore(item, list.firstChild);
   }
 
