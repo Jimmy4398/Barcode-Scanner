@@ -73,6 +73,13 @@
   #gate { max-width: 360px; margin: 60px auto; padding: 0 16px; }
   #gate .block-body { text-align: center; }
   #gate input[type="password"] { width: 100%; padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid #111827; margin-bottom: 10px; }
+
+  .spinner {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 4px solid #e5e7eb; border-top-color: #1AA260;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -85,6 +92,10 @@
       <div class="block-body" style="text-align:center;">
         <p style="font-size:14px;color:#333;margin-top:0;">Sign in with your approved Google account to continue.</p>
         <div id="googleSignInBtn" style="display:flex;justify-content:center;margin-top:10px;"></div>
+        <div id="signingInSpinner" style="display:none;flex-direction:column;align-items:center;gap:10px;margin-top:14px;">
+          <div class="spinner"></div>
+          <div style="font-size:13px;color:#555;">Signing you in…</div>
+        </div>
         <div id="gateStatus" style="margin-top:10px;"></div>
       </div>
     </div>
@@ -208,6 +219,7 @@
   let USER_EMAIL = null;
   let currentView = 'packing';
   let pendingBarcode = null;
+  let pendingItemTable = null;
   let currentItemData = null;
   let scanner = null;
   let scanningPaused = false;
@@ -286,8 +298,12 @@
 
   function handleCredentialResponse(response) {
     ID_TOKEN = response.credential;
+    document.getElementById('googleSignInBtn').style.display = 'none';
+    document.getElementById('signingInSpinner').style.display = 'flex';
     callApi('config', {}).then(res => {
+      document.getElementById('signingInSpinner').style.display = 'none';
       if (!res.success) {
+        document.getElementById('googleSignInBtn').style.display = 'flex';
         showStatus(res.error || 'Not authorized for this app.', false, 'gateStatus');
         ID_TOKEN = null;
         return;
@@ -299,13 +315,19 @@
       document.getElementById('gate').style.display = 'none';
       document.getElementById('phone').style.display = 'block';
       initApp();
-    }).catch(() => showStatus('Network error, try again', false, 'gateStatus'));
+    }).catch(() => {
+      document.getElementById('signingInSpinner').style.display = 'none';
+      document.getElementById('googleSignInBtn').style.display = 'flex';
+      showStatus('Network error, try again', false, 'gateStatus');
+    });
   }
 
   function signOut() {
     ID_TOKEN = null; USER_ROLE = null; USER_EMAIL = null; SERVER_CONFIG = null;
     if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
     document.getElementById('phone').style.display = 'none';
+    document.getElementById('signingInSpinner').style.display = 'none';
+    document.getElementById('googleSignInBtn').style.display = 'flex';
     document.getElementById('gate').style.display = 'block';
   }
 
@@ -391,6 +413,17 @@
       setLocation(currentView, document.getElementById('locationSelect').value);
     }
     applyPackingSelectColor();
+    recheckAcceptForPendingScan();
+  }
+
+  // If a scan is currently awaiting Accept/Decline and the person changes
+  // Current Location instead of re-scanning, re-evaluate the mismatch using
+  // the item's already-known table color \u2014 no new lookup needed.
+  function recheckAcceptForPendingScan() {
+    if (currentView !== 'packing' || !pendingBarcode || pendingItemTable === null) return;
+    const expectedColor = LOCATION_TABLE_MAP[document.getElementById('locationSelect').value];
+    const mismatch = !!(expectedColor && pendingItemTable && pendingItemTable !== expectedColor);
+    setAcceptEnabled(!mismatch);
   }
 
   function onSiteChange() {
@@ -439,6 +472,7 @@
 
   function resetScanUI() {
     pendingBarcode = null;
+    pendingItemTable = null;
     currentItemData = null;
     document.getElementById('confirmBlock').style.display = 'none';
     document.getElementById('followupBlock').style.display = 'none';
@@ -507,6 +541,7 @@
 
   function beginScan(code) {
     pendingBarcode = code;
+    pendingItemTable = null;
     if (scanner) { try { scanner.pause(true); } catch (e) {} }
 
     if (currentView === 'packing' && document.getElementById('locationSelect').value !== 'Packing Day (Truck)') {
@@ -523,6 +558,7 @@
           if (complete !== 'complete') color = INCOMPLETE_COLOR;
           else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
 
+          pendingItemTable = table || null;
           const expectedColor = LOCATION_TABLE_MAP[document.getElementById('locationSelect').value];
           if (expectedColor && table && table !== expectedColor) mismatch = true;
         }
