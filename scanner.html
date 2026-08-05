@@ -457,7 +457,7 @@
         setLocation(currentView, options[0]);
       }
     } else if (currentView === 'workshop') {
-      const locOptions = ['All', 'Blank'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      const locOptions = ['All', 'Not Received'].concat(SERVER_CONFIG.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = getLocationFilter();
 
@@ -795,7 +795,7 @@
       populateDropdown('dropoffSelect', dropoffOptions);
       document.getElementById('dropoffSelect').value = dropoffOptions.includes(dropoff) ? dropoff : 'All';
 
-      const locOptions = ['All', 'Blank'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
+      const locOptions = ['All', 'Not Received'].concat(res.recSiteOptions.concat(SERVER_CONFIG.packingOptions).sort(naturalCompare));
       populateDropdown('locationSelect', locOptions);
       document.getElementById('locationSelect').value = locOptions.includes(loc) ? loc : 'All';
 
@@ -808,9 +808,9 @@
   }
 
   function renderSummary(res) {
-    const isBlankFilter = (getLocationFilter() === 'Blank');
+    const isBlankFilter = (getLocationFilter() === 'Not Received');
     const curLoc = getLocationFilter();
-    const isPinnedLocation = (curLoc !== 'All' && curLoc !== 'Blank');
+    const isPinnedLocation = (curLoc !== 'All' && curLoc !== 'Not Received');
 
     let html = '<div><b>Locations:</b></div>';
     let anyShown = false;
@@ -848,11 +848,14 @@
       html += '<div style="color:#666;">No site activity for this selection.</div>';
     }
 
-    if (curLoc !== 'Blank' && !isPinnedLocation) {
+    if (curLoc !== 'Not Received' && !isPinnedLocation) {
       html += '<div class="total-green">All Locations = ' + res.allSitesLocationTotal + '</div>';
+      if (curLoc === 'All') {
+        html += '<div><b>Not Received</b> = ' + (res.totalWishes - res.allSitesLocationTotal) + '</div>';
+      }
     }
     if (!isPinnedLocation) {
-      html += '<div class="total-red">Wishes = ' + res.totalWishes + '</div>';
+      html += '<div class="total-red">Total Wishes = ' + res.totalWishes + '</div>';
     }
     document.getElementById('summaryList').innerHTML = html;
   }
