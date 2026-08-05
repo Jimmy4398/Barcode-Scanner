@@ -14,7 +14,7 @@
   p.subtitle { text-align: center; font-size: 11px; color: #0b3d23; margin: 0 0 14px; }
 
   .block { margin-bottom: 14px; }
-  .block-header { background: #E8262B; color: #111827; border: 3px solid #111827; border-bottom: none; border-radius: 10px 10px 0 0; padding: 6px 12px; font-size: 14px; font-weight: 700; }
+  .block-header { background: #E8262B; color: #FFFFFF; border: 3px solid #111827; border-bottom: none; border-radius: 10px 10px 0 0; padding: 6px 12px; font-size: 14px; font-weight: 700; }
   .block-body { background: white; border: 3px solid #111827; border-radius: 0 0 10px 10px; padding: 10px; overflow: hidden; }
   .block-body.no-header { border-radius: 10px; }
 
@@ -359,6 +359,29 @@
     renderView();
   }
 
+  const PACKING_SELECT_COLORS = {
+    'Packing Day (Check-in)': { bg: '#FFEB3B', color: '#111827' },
+    'Packing Day (Spirit)': { bg: '#DC2626', color: '#FFFFFF' },
+    'Packing Day (Packing)': { bg: '#111827', color: '#FFFFFF' },
+    'Packing Day (Yellow Table)': { bg: '#FFF9C4', color: '#111827' },
+    'Packing Day (Blue Table)': { bg: '#60A5FA', color: '#111827' },
+    'Packing Day (Pink Table)': { bg: '#F472B6', color: '#111827' },
+    'Packing Day (Green Table)': { bg: '#4ADE80', color: '#111827' },
+    'Packing Day (Truck)': { bg: '#E5E7EB', color: '#111827' },
+  };
+
+  function applyPackingSelectColor() {
+    const sel = document.getElementById('locationSelect');
+    if (currentView !== 'packing') {
+      sel.style.background = '';
+      sel.style.color = '';
+      return;
+    }
+    const c = PACKING_SELECT_COLORS[sel.value];
+    sel.style.background = c ? c.bg : '';
+    sel.style.color = c ? c.color : '';
+  }
+
   function onLocationChange() {
     if (currentView === 'workshop') {
       setLocationFilter(document.getElementById('locationSelect').value);
@@ -366,6 +389,7 @@
     } else {
       setLocation(currentView, document.getElementById('locationSelect').value);
     }
+    applyPackingSelectColor();
   }
 
   function onSiteChange() {
@@ -409,6 +433,7 @@
 
       loadSummary(); // also refreshes Site + Dropoff + Current Location dropdowns from live data
     }
+    applyPackingSelectColor();
   }
 
   function resetScanUI() {
@@ -459,12 +484,18 @@
 
   // Routes into either the plain confirm box, or (Packing Day only) a
   // colored confirm box that first looks up Complete + Packing Table.
+  function setColoredBox(elId, bgColor) {
+    const el = document.getElementById(elId);
+    el.style.background = bgColor;
+    el.style.color = (bgColor === INCOMPLETE_COLOR) ? '#FFFFFF' : '#111827';
+  }
+
   function beginScan(code) {
     pendingBarcode = code;
     if (scanner) { try { scanner.pause(true); } catch (e) {} }
 
     if (currentView === 'packing' && document.getElementById('locationSelect').value !== 'Packing Day (Truck)') {
-      document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+      setColoredBox('confirmCode', FALLBACK_COLOR);
       document.getElementById('confirmCode').textContent = code + ' (checking...)';
       document.getElementById('confirmBlock').style.display = 'block';
       callApi('lookup', { barcode: code, view: 'packing' }).then(res => {
@@ -475,14 +506,14 @@
           if (complete !== 'complete') color = INCOMPLETE_COLOR;
           else if (PACKING_COLORS[table]) color = PACKING_COLORS[table];
         }
-        document.getElementById('confirmCode').style.background = color;
+        setColoredBox('confirmCode', color);
         document.getElementById('confirmCode').textContent = code;
       }).catch(() => {
-        document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+        setColoredBox('confirmCode', FALLBACK_COLOR);
         document.getElementById('confirmCode').textContent = code;
       });
     } else {
-      document.getElementById('confirmCode').style.background = FALLBACK_COLOR;
+      setColoredBox('confirmCode', FALLBACK_COLOR);
       document.getElementById('confirmCode').textContent = code;
       document.getElementById('confirmBlock').style.display = 'block';
     }
@@ -655,7 +686,7 @@
   function showPackingResult(code) {
     const table = (currentItemData && currentItemData['Packing Table'] || '').toLowerCase();
     const color = PACKING_COLORS[table] || FALLBACK_COLOR;
-    document.getElementById('resultCode').style.background = color;
+    setColoredBox('resultCode', color);
     document.getElementById('resultCode').textContent = code + (currentItemData && currentItemData['Packing Table'] ? ' — ' + currentItemData['Packing Table'] : '');
     document.getElementById('resultBlock').style.display = 'block';
   }
@@ -692,6 +723,7 @@
     document.getElementById('summaryList').textContent = 'Loading...';
     document.getElementById('wishListBox').textContent = 'Loading...';
     callApi('summary', { location: loc, site: site, dropoff: dropoff }).then(res => {
+      if (currentView !== 'workshop') return; // user switched views before this arrived; ignore stale response
       if (!res.success) { document.getElementById('summaryList').textContent = res.error; return; }
 
       // Refresh all three filter dropdowns from live data, keeping the current selection if still valid
@@ -709,7 +741,10 @@
 
       renderSummary(res);
       renderWishList(res.codes);
-    }).catch(err => { document.getElementById('summaryList').textContent = 'Error: ' + err.message; });
+    }).catch(err => {
+      if (currentView !== 'workshop') return;
+      document.getElementById('summaryList').textContent = 'Error: ' + err.message;
+    });
   }
 
   function renderSummary(res) {
@@ -753,8 +788,10 @@
       html += '<div style="color:#666;">No site activity for this selection.</div>';
     }
 
-    if (!isPinnedLocation) {
+    if (curLoc !== 'Blank' && !isPinnedLocation) {
       html += '<div class="total-green">All Locations = ' + res.allSitesLocationTotal + '</div>';
+    }
+    if (!isPinnedLocation) {
       html += '<div class="total-red">Wishes = ' + res.totalWishes + '</div>';
     }
     document.getElementById('summaryList').innerHTML = html;
