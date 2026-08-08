@@ -127,7 +127,7 @@
         <select id="viewSelect" class="dd" onchange="onViewChange()">
           <option value="sitehost">Site Host Elf</option>
           <option value="packing">Packing Day Elf</option>
-          <option value="guiding">Guiding Spirit</option>
+          <option value="guiding">Packing Day (Fairy Godmother)</option>
           <option value="workshop">Santa's Workshop</option>
         </select>
       </div>
@@ -148,7 +148,7 @@
     </div>
 
     <div class="block" id="siteBlock" style="display:none;">
-      <div class="block-header">Site:</div>
+      <div class="block-header">Agency:</div>
       <div class="block-body" style="padding:0;">
         <select id="siteSelect" class="dd" onchange="onSiteChange()"></select>
       </div>
@@ -802,7 +802,7 @@
       });
   }
 
-  // ---------- Guiding Spirit ----------
+  // ---------- Fairy Godmother ----------
   function acceptForGuiding(code) {
     const loc = document.getElementById('locationSelect').value;
     callApi('update', { barcode: code, field: 'Location', value: loc, view: 'guiding' }).catch(() => {});
