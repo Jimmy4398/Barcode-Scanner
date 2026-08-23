@@ -855,6 +855,7 @@
       html += '<button type="button" class="' + (opt === sitehostState.complete ? 'selected' : '') + '" onclick="selectBtn(\'complete\',\'' + opt + '\')">' + opt + '</button>';
     });
     html += '</div>';
+    html += '<div id="completeError" style="display:none;color:#991b1b;font-size:12px;font-weight:700;margin:-6px 0 8px;"></div>';
 
     html += '<div class="field-label">Anything Missing</div><textarea class="field-input" id="missingInput">' + (data['Missing'] || '') + '</textarea>';
     html += '<div class="confirm-btns" style="margin-top:12px;">';
@@ -878,7 +879,22 @@
     Array.from(groupEl.children).forEach(btn => btn.classList.toggle('selected', btn.textContent === value));
   }
 
+ function showCompleteError(msg) {
+  const el = document.getElementById('completeError');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideCompleteError() {
+  const el = document.getElementById('completeError');
+  if (el) el.style.display = 'none';
+}
+ 
   function submitSiteHostUpdate(code) {
+    if (sitehostState.complete !== 'Empty' && sitehostState.status !== 'Received') {
+    showCompleteError("A gift can't be Partial or Complete until Gift Status is Received.");
+    return;
+    }
     const loc = document.getElementById('locationSelect').value;
     const fields = {
       'Location': loc,
