@@ -239,7 +239,109 @@
   </div>
 
 <script>
-  // ======= Apps Script Web App URL (ends in /exec) =======
+  /**
+ * ============================================================================
+ * OPERATION ELF SCANNER - frontend (runs entirely in the volunteer's browser)
+ * ============================================================================
+ * This file is the WHOLE app: HTML structure above, CSS in <style>, and all
+ * behavior below in this <script>. It talks to a separate backend (Code.gs,
+ * a Google Apps Script project) over the network for anything involving the
+ * Google Sheet - this file never touches the Sheet directly.
+ *
+ * ---- THE FOUR VIEWS: internal names vs. what's shown on screen ----
+ * Throughout this code, views are referred to by short internal names that
+ * do NOT match their current on-screen labels. This is intentional - the
+ * internal names were set once early on and never renamed, even as the
+ * user-facing labels changed later. Don't "fix" this; it's just how it is:
+ *
+ *   'sitehost'  -> displayed as "Site Host Elf"
+ *   'packing'   -> displayed as "Packing Day Elf"
+ *   'guiding'   -> displayed as "Fairy Godmother" (originally "Guiding Spirit"
+ *                  - the internal name 'guiding' stuck even after the visible
+ *                  label was renamed, so don't be confused seeing 'guiding'
+ *                  in the code and "Fairy Godmother" on the screen)
+ *   'workshop'  -> displayed as "Santa's Workshop"
+ *
+ * ---- THE SCAN FLOW (the biggest/most complex part of this file) ----
+ *   Camera detects a barcode -> onScanSuccess() -> beginScan()
+ *     -> shows the confirm box, waits for Accept or Decline
+ *     -> Decline: logs it, resumes camera, nothing saved
+ *     -> Accept: acceptScan() branches by currentView into one of:
+ *          acceptForPacking()   - saves Location immediately, no extra screen
+ *          acceptForSiteHost()  - looks up the item, shows an editable form
+ *          acceptForGuiding()   - looks up the item, shows read-only details
+ *   Shared "what am I working on right now" state (used across all three
+ *   branches): pendingBarcode, pendingItemTable, currentItemData. These get
+ *   cleared at every reset point (decline, cancel, view switch, etc.) - if a
+ *   button ever seems to remember stale data from a previous scan, this is
+ *   the state to check first.
+ *
+ * ---- PACKING DAY'S COLOR CHECK: a real gotcha ----
+ * Only 4 stops have a color comparison at all: Yellow/Blue/Pink/Purple Table
+ * (see LOCATION_TABLE_MAP). Check-in, Fairy Godmother, Packing, and Truck are
+ * NOT in that map, so they're automatically exempt from ever greying out
+ * Accept - this is by design, not a bug.
+ * TRUCK IS SPECIAL: it doesn't just skip the mismatch check, it skips the
+ * server lookup ENTIRELY (see the `!== 'Packing Day (Truck)'` condition in
+ * beginScan) - a deliberate speed optimization since Truck never needs a
+ * color check at all. If Truck-related color logic ever looks "missing",
+ * this is why.
+ *
+ * ---- THE NETWORK LAYER (callApi / callApiOnce) ----
+ * All server calls go through callApi(), which wraps callApiOnce() with:
+ *   - a 12-second timeout (a stalled request is treated as failed)
+ *   - exactly ONE automatic retry, 1.2s later, before giving up for real
+ * The actual network trick (callApiOnce) is JSONP, not a normal fetch: it
+ * creates a <script> tag pointing at the Apps Script URL, because browsers
+ * block direct cross-domain requests (CORS) but do allow loading a <script>
+ * from anywhere. The Apps Script backend responds with actual JS code that
+ * calls a one-time, randomly-named function we create just for that request.
+ * The script tag and that function are both deleted immediately after use -
+ * if you're hunting for one in DevTools' Sources tab, it's already gone;
+ * check the Network tab instead.
+ *
+ * ---- SIGN-IN / AUTH GOTCHAS ----
+ * ID_TOKEN is kept in memory ONLY - never saved to localStorage - so
+ * everyone re-signs in each fresh session, on purpose (Google's own sign-in
+ * button remembers the account, so this is usually a one-tap re-login, not
+ * a real hassle).
+ * If ANY server response ever comes back with authError: true (checked
+ * inside callApiOnce), the app force-signs-out automatically, no matter
+ * which function made the call. This is centralized in one place, not
+ * scattered through every API call.
+ * ROLE_VIEWS in this file is a DUPLICATE of the same object in Code.gs. This
+ * copy only controls what appears in the View dropdown (cosmetic). The
+ * REAL security enforcement is Code.gs's copy, checked server-side on every
+ * request - never assume hiding something here is actually secure by itself.
+ *
+ * ---- SEASON GATE (Packing Day Elf + Fairy Godmother can be paused) ----
+ * Controlled by a "Season" column in the Team sheet tab, read fresh from the
+ * server (not just cached at sign-in) at two specific moments, closing what
+ * would otherwise be real gaps in a long-running session:
+ *   - tapping "Start Scanning" re-checks live before turning the camera on
+ *   - the off-season banner has its own "Check Again" button, since someone
+ *     already stuck on that screen has no other way to notice it turned
+ *     back on
+ *
+ * ---- SANTA'S WORKSHOP: a race-condition fix worth knowing about ----
+ * loadSummary()'s .then()/.catch() both start with
+ *   if (currentView !== 'workshop') return;
+ * This looks like dead code but isn't: Workshop's data can take a moment to
+ * load (it reads the whole sheet), and without this guard, switching to a
+ * different view WHILE that request was still in flight would let the
+ * delayed response land later and silently overwrite that other view's
+ * Current Location dropdown with Workshop's full list. Don't remove this.
+ *
+ * ---- RECENT SCANS: four distinct outcomes, four colors ----
+ * addHistoryItem (saved/failed, green/red), addDeclinedItem (grey - user
+ * chose Decline, not an error), addNotFoundItem (orange - barcode didn't
+ * match anything in the sheet). Not-found is logged immediately the moment
+ * it's detected, before the person taps anything - the acknowledgment
+ * screen (with its own Continue button) exists specifically so a bad scan
+ * can never be silently missed by auto-resuming the camera on its own.
+ * ============================================================================
+ */
+// ======= Apps Script Web App URL (ends in /exec) =======
   const API_URL = 'https://script.google.com/macros/s/AKfycby8QcEYA5u8_WiPD7ldafBbGMFuA4YWhNMx45fH0_TmgvDgj2hpXhocCcRucQ43QJdd/exec';
   // =========================================================
 
