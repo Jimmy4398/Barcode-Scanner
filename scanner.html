@@ -43,8 +43,24 @@
     color: var(--dk-grey); padding: 10px 8px; appearance: none; -webkit-appearance: none;
   }
 
-  #reader { width: 100%; max-height: 320px; border-radius: 6px; overflow: hidden; background: #000; display: flex; justify-content: center; }
+//---  #reader { width: 100%; max-height: 320px; border-radius: 6px; overflow: hidden; background: #000; display: flex; justify-content: center; }
 
+ #reader { 
+    width: 100%; 
+    height: 320px; /* Changed from max-height to a fixed height for stability */
+    border-radius: 6px; 
+    overflow: hidden; 
+    background: #000; 
+    position: relative; /* Crucial for absolute positioned scanner overlays */
+}
+/* Force the library's injected video and canvas elements to respect the 320px bounds */
+#reader video, 
+#reader canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important; /* Clips the sides evenly so the center stays true */
+}
+ 
   button { font-size: 14px; padding: 10px 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; }
   .btn-block { width: 100%; }
   .btn-primary { background: var(--elf-purple); color: white; }
@@ -697,11 +713,28 @@
     document.getElementById('startScan').style.display = 'none';
     document.getElementById('toggleScan').style.display = 'block';
     scanner = new Html5Qrcode('reader');
-    scanner.start(
+//---    scanner.start(
+//---  { facingMode: 'environment' },
+//---  { fps: 10, qrbox: { width: 240, height: 120 }, aspectRatio: 1.333334 },
+//---  onScanSuccess, () => {}
+//--- ).catch(err => {
+     
+     scanner.start(
   { facingMode: 'environment' },
-  { fps: 10, qrbox: { width: 240, height: 120 }, aspectRatio: 1.333334 },
-  onScanSuccess, () => {}
+  { 
+    fps: 10, 
+    // Pass a function to dynamically calculate and align the scanning box
+    qrbox: (viewfinderWidth, viewfinderHeight) => {
+        return {
+            width: 240,
+            height: 120
+        };
+    }
+  },
+  onScanSuccess, 
+  () => {}
 ).catch(err => {
+      
       showStatus('Camera error: ' + err, false);
       document.getElementById('reader').style.display = 'none';
       document.getElementById('startScan').style.display = 'block';
